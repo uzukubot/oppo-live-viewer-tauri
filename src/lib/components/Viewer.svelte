@@ -42,6 +42,12 @@
   } | null>(null);
   /** 音量淡变（淡入/淡出）的单 rAF 槽。 */
   let volRAF: number | null = null;
+  /** 当前是否正在淡变中（防止结尾淡出被反复触发）。 */
+  let fading = false;
+  /** 结尾淡出监控的 rAF 槽。 */
+  let endFadeRAF: number | null = null;
+  /** 是否还有待清理的旧视频（切走时先淡出再停，完成前不挂新视频）。 */
+  let oldVideoPending = false;
 
   function clamp(v: number, lo: number, hi: number) {
     return Math.min(hi, Math.max(lo, v));
@@ -73,27 +79,52 @@
     const p = photo;
     void p;
     if (p?.id !== lastPhotoId) {
+      lastPhotoId = p?.id ?? null;
       switchAt = performance.now();
       startDiag = null;
-      // 切换前先静音+暂停旧视频，避免有声状态下被硬切产生爆音
-      if (videoEl) {
-        lastVideoWasPlaying = !videoEl.paused && !videoEl.ended;
-        videoEl.muted = true;
-        videoEl.pause();
-      } else {
-        lastVideoWasPlaying = false;
-      }
-      lastPhotoId = p?.id ?? null;
       zoom = 1;
       pan = { x: 0, y: 0 };
       imgSrc = null;
       imgLoaded = false;
       imgError = false;
-      videoUrl = null;
       videoError = false;
       videoDims = null;
       videoEnded = false;
       videoBlocked = false;
+      // 旧视频：持续声音被硬切必然爆音，先淡出再停；淡出完成前不挂新视频
+      const old = videoEl;
+      if (old) {
+        lastVideoWasPlaying = !old.paused && !old.ended;
+        const wasPlaying = lastVideoWasPlaying;
+        if (wasPlaying && !muted && old.volume > 0.01) {
+          oldVideoPending = true;
+          const oldUrl = videoUrl;
+          fadeVolume(old, 0, 80);
+          // 等淡出真正到 0 再停（rAF 可能抖动）；上限 250ms 防卡死
+          let waited = 0;
+          const finish = () => {
+            waited += 15;
+            if (waited < 250 && old.volume > 0.01) {
+              setTimeout(finish, 15);
+              return;
+            }
+            old.muted = true;
+            old.pause();
+            oldVideoPending = false;
+            if (videoUrl === oldUrl) videoUrl = null;
+          };
+          setTimeout(finish, 15);
+        } else {
+          oldVideoPending = false;
+          old.muted = true;
+          old.pause();
+          videoUrl = null;
+        }
+      } else {
+        lastVideoWasPlaying = false;
+        oldVideoPending = false;
+        videoUrl = null;
+      }
     }
     if (p) {
       const pid = p.id;
@@ -113,7 +144,17 @@
     if (p?.is_live) {
       const pid = p.id;
       photoCache.ensureMp4Url(p).then((u) => {
-        if (u && photo?.id === pid) videoUrl = u;
+        if (!u || photo?.id !== pid) return;
+        // 等旧视频淡出卸载后再挂新视频，否则换 src 会硬切旧音频
+        const apply = () => {
+          if (photo?.id !== pid) return;
+          if (oldVideoPending) {
+            setTimeout(apply, 20);
+            return;
+          }
+          videoUrl = u;
+        };
+        apply();
       });
     }
     // 预取相邻照片，快速翻看
@@ -279,6 +320,7 @@
             el.volume = 0;
             fadeVolume(el, 1, 50);
           }
+          monitorEndFade();
         })
         .catch(() => {
           startDiag = {
@@ -306,6 +348,7 @@
         el.volume = muted ? 1 : 0;
         el.play().catch(() => {});
         if (!muted) fadeVolume(el, 1, 50);
+        monitorEndFade();
       }
     } else {
       videoEnded = true;
@@ -338,6 +381,7 @@
     if (volRAF !== null) cancelAnimationFrame(volRAF);
     const from = el.volume;
     const start = performance.now();
+    fading = true;
     const step = () => {
       const p = Math.min(1, (performance.now() - start) / ms);
       el.volume = from + (target - from) * p;
@@ -346,18 +390,27 @@
       } else {
         el.volume = target;
         volRAF = null;
+        fading = false;
       }
     };
     volRAF = requestAnimationFrame(step);
   }
-  /** 接近结尾时淡出音量，避免音频在结尾处被硬切产生爆音。 */
-  function onTimeUpdate() {
-    const v = videoEl;
-    if (!v) return;
-    if (muted || v.paused || v.ended) return;
-    if (v.duration > 0 && v.duration - v.currentTime < 0.12 && v.volume > 0.01) {
-      fadeVolume(v, 0, 60);
-    }
+  /** 播放期间用 rAF 监控：接近结尾时淡出音量，避免音频结尾被硬切爆音。
+   * （不能用 timeupdate——它约 4Hz，赶不上结尾最后 150ms 的淡出窗口。） */
+  function monitorEndFade() {
+    if (endFadeRAF !== null) cancelAnimationFrame(endFadeRAF);
+    const tick = () => {
+      const v = videoEl;
+      if (!v || v.paused || v.ended || muted) {
+        endFadeRAF = null;
+        return;
+      }
+      if (!fading && v.duration > 0 && v.duration - v.currentTime < 0.15 && v.volume > 0.01) {
+        fadeVolume(v, 0, 70);
+      }
+      endFadeRAF = requestAnimationFrame(tick);
+    };
+    endFadeRAF = requestAnimationFrame(tick);
   }
 
   function videoLayout() {
@@ -444,7 +497,6 @@
         playsinline
         onloadedmetadata={onVideoMetadata}
         oncanplay={tryPlay}
-        ontimeupdate={onTimeUpdate}
         onerror={onVideoError}
         onended={onVideoEnded}
         style={vl
