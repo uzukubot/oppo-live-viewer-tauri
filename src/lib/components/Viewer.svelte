@@ -26,6 +26,8 @@
   let videoDims = $state<{ w: number; h: number } | null>(null);
   let videoEl = $state<HTMLVideoElement | null>(null);
   let videoEnded = $state(false);
+  /** 自动播放被浏览器策略拦截（视频仍在，等待点击播放）。 */
+  let videoBlocked = $state(false);
   let playMode = $state<"once" | "loop">("once");
   let muted = $state(true);
 
@@ -67,6 +69,7 @@
       videoError = false;
       videoDims = null;
       videoEnded = false;
+      videoBlocked = false;
     }
     if (p) {
       const pid = p.id;
@@ -210,8 +213,8 @@
     if (!videoEl) return;
     videoEl.muted = muted;
     videoEl.play().catch(() => {
-      // 自动播放被浏览器策略拦截：显示重播按钮，等用户点击播放
-      videoEnded = true;
+      // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
+      videoBlocked = true;
     });
   }
   function onVideoError() {
@@ -232,7 +235,9 @@
     if (!videoEl) return;
     videoEl.currentTime = 0;
     videoEnded = false;
-    videoEl.play().catch(() => {});
+    videoBlocked = false;
+    videoEl.muted = muted;
+    videoEl.play().catch(() => (videoBlocked = true));
   }
   function toggleLoop() {
     playMode = playMode === "loop" ? "once" : "loop";
@@ -240,7 +245,10 @@
   }
   function toggleMute() {
     muted = !muted;
-    if (!muted && videoEl) videoEl.play().catch(() => {});
+    if (videoEl) {
+      videoEl.muted = muted;
+      if (!muted) videoEl.play().catch(() => (videoBlocked = true));
+    }
   }
 
   function videoLayout() {
@@ -308,6 +316,10 @@
       class="video-box"
       class:hidden={!vl || videoEnded}
       style={vl ? `width:${vl.boxW}px;height:${vl.boxH}px;` : ""}
+      onclick={videoBlocked ? replay : toggleMute}
+      onkeydown={(e) => e.key === "Enter" && (videoBlocked ? replay() : toggleMute())}
+      role="button"
+      tabindex="-1"
     >
       <video
         bind:this={videoEl}
@@ -323,6 +335,9 @@
           ? `width:${vl.vidW}px;height:${vl.vidH}px;transform:translate(-50%,-50%) rotate(${vl.deg}deg);`
           : "width:1px;height:1px;transform:translate(-50%,-50%);"}
       ></video>
+      {#if videoBlocked}
+        <div class="play-prompt">▶ 点击播放</div>
+      {/if}
     </div>
   {/if}
   {#if photo?.is_live && videoError}
@@ -431,6 +446,19 @@
   }
   .video-box.hidden {
     visibility: hidden;
+  }
+
+  .play-prompt {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    pointer-events: none;
   }
   .video-box video {
     position: absolute;

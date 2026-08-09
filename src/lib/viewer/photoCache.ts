@@ -24,6 +24,7 @@ class PhotoCache {
   private entries = new Map<number, Entry>();
   private order: number[] = [];
   private inFlight = new Set<number>();
+  private mp4InFlight = new Map<number, Promise<string | null>>();
 
   private touch(id: number) {
     this.order = this.order.filter((x) => x !== id);
@@ -98,22 +99,28 @@ class PhotoCache {
     }
   }
 
-  /** 获取 MP4 的 objectURL（Live Photo）。 */
+  /** 获取 MP4 的 objectURL（Live Photo）。带并发去重，避免 effect 重跑重复 fetch。 */
   async ensureMp4Url(meta: PhotoMeta): Promise<string | null> {
     let e = this.entries.get(meta.id);
     if (e?.mp4Url) return e.mp4Url;
     if (!meta.is_live) return null;
-    try {
-      await this.ensureBlob(meta); // 确保已 load_photo
-      const blob = await this.loadAndFetch(meta.id, "mp4");
-      if (!this.entries.has(meta.id)) this.entries.set(meta.id, {});
-      const entry = this.entries.get(meta.id)!;
-      entry.mp4Url = URL.createObjectURL(blob);
-      this.touch(meta.id);
-      return entry.mp4Url;
-    } catch {
-      return null;
-    }
+    if (this.mp4InFlight.has(meta.id)) return this.mp4InFlight.get(meta.id)!;
+    const p = (async () => {
+      try {
+        await this.ensureBlob(meta); // 确保已 load_photo
+        const blob = await this.loadAndFetch(meta.id, "mp4");
+        if (!this.entries.has(meta.id)) this.entries.set(meta.id, {});
+        const entry = this.entries.get(meta.id)!;
+        entry.mp4Url = URL.createObjectURL(blob);
+        this.touch(meta.id);
+        return entry.mp4Url;
+      } catch {
+        return null;
+      }
+    })();
+    this.mp4InFlight.set(meta.id, p);
+    p.finally(() => this.mp4InFlight.delete(meta.id));
+    return p;
   }
 
   // ---- 缩略图缓存（网格用） ----
