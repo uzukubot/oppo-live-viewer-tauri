@@ -17,6 +17,8 @@ export const app = $state({
   sidebarVisible: true,
   /** 侧边栏宽度（可拖拽调整）。 */
   sidebarWidth: 300,
+  /** 诊断面板开关（F12）。 */
+  showDiag: false,
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {

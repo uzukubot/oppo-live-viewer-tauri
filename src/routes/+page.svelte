@@ -52,6 +52,9 @@
       case "Escape":
         app.sidebarVisible = !app.sidebarVisible;
         break;
+      case "F12":
+        app.showDiag = !app.showDiag;
+        break;
     }
   }
 

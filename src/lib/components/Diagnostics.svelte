@@ -1,0 +1,132 @@
+<script lang="ts">
+  import type { PhotoMeta } from "$lib/types";
+  import { app } from "$lib/state.svelte";
+
+  interface Props {
+    photo: PhotoMeta | null;
+    videoUrl: string | null;
+    videoError: boolean;
+    videoEnded: boolean;
+    videoEl: HTMLVideoElement | null;
+    imgLoaded: boolean;
+    imgError: boolean;
+  }
+  let {
+    photo,
+    videoUrl,
+    videoError,
+    videoEnded,
+    videoEl,
+    imgLoaded,
+    imgError,
+  }: Props = $props();
+
+  const hdr = $derived(
+    typeof matchMedia !== "undefined" && matchMedia("(dynamic-range: high)").matches,
+  );
+  const p3 = $derived(
+    typeof matchMedia !== "undefined" && matchMedia("(color-gamut: p3)").matches,
+  );
+  const hevc = $derived(
+    videoEl ? videoEl.canPlayType('video/mp4; codecs="hvc1"') : "（无视频元素）",
+  );
+  const avc = $derived(
+    videoEl ? videoEl.canPlayType('video/mp4; codecs="avc1.42E01E"') : "（无视频元素）",
+  );
+</script>
+
+<div
+  class="diag"
+  role="dialog"
+  tabindex="-1"
+  aria-label="诊断信息"
+  onclick={(e) => e.stopPropagation()}
+  onkeydown={(e) => e.stopPropagation()}
+>
+  <div class="diag-head">
+    <span>诊断信息</span>
+    <button class="close" onclick={() => (app.showDiag = false)}>×</button>
+  </div>
+  <table>
+    <tbody>
+      <tr><th>平台</th><td>{navigator.userAgent.slice(0, 90)}</td></tr>
+      <tr><th>HDR 屏 (dynamic-range)</th><td>{hdr ? "是 ✅" : "否 ❌"}</td></tr>
+      <tr><th>广色域 (color-gamut p3)</th><td>{p3 ? "是" : "否"}</td></tr>
+      <tr><th>当前图片</th><td>{photo?.name ?? "无"}</td></tr>
+      <tr><th>is_live</th><td>{String(photo?.is_live)}</td></tr>
+      <tr><th>video_rotation</th><td>{photo?.video_rotation ?? "—"}</td></tr>
+      <tr><th>ultra_hdr</th><td>{photo?.ultra_hdr ? JSON.stringify(photo.ultra_hdr) : "无"}</td></tr>
+      <tr><th>视频 URL</th><td>{videoUrl ? "已设置" : "未设置"}</td></tr>
+      <tr><th>视频错误</th><td>{String(videoError)}</td></tr>
+      <tr><th>视频已结束</th><td>{String(videoEnded)}</td></tr>
+      <tr><th>HEVC 支持 (hvc1)</th><td>{hevc}</td></tr>
+      <tr><th>H.264 支持 (avc1)</th><td>{avc}</td></tr>
+      <tr><th>视频尺寸</th><td>{videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}</td></tr>
+      <tr><th>图片已加载</th><td>{String(imgLoaded)}</td></tr>
+      <tr><th>图片错误</th><td>{String(imgError)}</td></tr>
+    </tbody>
+  </table>
+  <p class="hint">
+    请把这份信息发给我。HDR 屏 ❌ = WebView2 未启用 HDR 输出；HEVC 支持为空 = 无法播放 HEVC 视频。
+  </p>
+</div>
+
+<style>
+  .diag {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 30;
+    width: 360px;
+    max-height: 80%;
+    overflow: auto;
+    background: rgba(18, 20, 24, 0.95);
+    border: 1px solid #2a2d33;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    backdrop-filter: blur(8px);
+  }
+
+  .diag-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+    color: #e8e8e8;
+    margin-bottom: 8px;
+  }
+  .close {
+    border: none;
+    background: transparent;
+    color: #8a8f98;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .close:hover {
+    color: #fff;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    color: #8a8f98;
+    font-weight: 500;
+    padding: 3px 6px 3px 0;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  td {
+    color: #d8dae0;
+    padding: 3px 0;
+    word-break: break-all;
+  }
+
+  .hint {
+    margin: 8px 0 0;
+    color: #5a5e66;
+  }
+</style>

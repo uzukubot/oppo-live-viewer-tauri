@@ -4,6 +4,7 @@
   import { displayDims } from "$lib/types";
   import type { PhotoMeta } from "$lib/types";
   import { photoCache } from "$lib/viewer/photoCache";
+  import Diagnostics from "./Diagnostics.svelte";
 
   const photo = $derived(app.photos[app.index] ?? null);
 
@@ -358,6 +359,18 @@
 
   {#if at100}
     <div class="zoom-hint">100%</div>
+  {/if}
+
+  {#if app.showDiag}
+    <Diagnostics
+      {photo}
+      {videoUrl}
+      {videoError}
+      {videoEnded}
+      {videoEl}
+      {imgLoaded}
+      {imgError}
+    />
   {/if}
 </div>
 
