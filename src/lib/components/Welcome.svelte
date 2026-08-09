@@ -10,7 +10,7 @@
   <p class="hint">或将文件夹 / 图片直接拖入窗口</p>
   <ul class="feats">
     <li>🖼️ 高质量渲染 · 色彩管理 · 100% 像素级查看</li>
-    <li>📸 Android Ultra HDR（HDR 屏幕自动显示 HDR）</li>
+    <li>📸 Android Ultra HDR 识别与徽标（真 HDR 输出待支持）</li>
     <li>🎬 Live Photo 动态播放</li>
   </ul>
 </div>

@@ -16,9 +16,9 @@ const CACHE_CAP = 16;
 
 /**
  * 图片字节/资源缓存。
- * - 静态图由查看器直接用 `<img src="viewer://...">` 原生解码（支持 Ultra HDR），
- *   这里只负责预热 Rust 字节缓存 + 提供 MP4 与缩略图。
- * - 缩略图（网格）用 createImageBitmap 高质量下采样。
+ * - 静态图：先 load_photo 预热 Rust 缓存，再取字节生成 blob objectURL 交给 <img>，
+ *   避免直连 viewer:// 的 404 竞态（见 KNOWN_ISSUES）；<img> 由浏览器原生解码。
+ * - Live 视频：提供 mp4 objectURL；网格缩略图用 createImageBitmap 高质量下采样。
  */
 class PhotoCache {
   private entries = new Map<number, Entry>();

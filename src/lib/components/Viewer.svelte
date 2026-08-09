@@ -44,7 +44,8 @@
     return { iw, ih, scale };
   });
 
-  // <img> 的尺寸与位置：Chromium 对 <img> 原生解码 Ultra HDR（HDR 屏显示 HDR）
+  // <img> 的尺寸与位置：交给浏览器原生解码（ICC 色彩/EXIF 方向/缩放质量）。
+  // 注：WebView2 合成层不输出真 HDR，HDR 屏上显示的仍是 SDR 基础图（见 KNOWN_ISSUES）
   const imgStyle = $derived.by(() => {
     if (!fit) return null;
     const s = fit.scale * zoom;
