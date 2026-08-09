@@ -40,6 +40,20 @@
     viewportH = listEl.clientHeight;
   }
 
+  let lastQuery = "";
+  /** 搜索词变化（含清空）时瞬移到当前照片行：过滤布局变化后列表仍停在旧位置，
+   * 下一次翻页会触发跨越大段距离的平滑滚动，这里改为立即定位。 */
+  $effect(() => {
+    const q = app.search.trim().toLowerCase();
+    if (q === lastQuery) return;
+    lastQuery = q;
+    const pos = filtered.indexOf(app.index);
+    if (listEl && pos >= 0) {
+      lastIndex = app.index;
+      listEl.scrollTop = pos * ROW;
+    }
+  });
+
   /** 当前照片变化时，列表滚动到对应行（保持选择可见）。 */
   $effect(() => {
     const i = app.index;
