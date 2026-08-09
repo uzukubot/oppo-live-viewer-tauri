@@ -30,6 +30,18 @@
   let videoBlocked = $state(false);
   let playMode = $state<"once" | "loop">("once");
   let muted = $state(true);
+  /** 起播时序诊断（供 F12 面板显示）：测量切换→起播各节点耗时。 */
+  let switchAt = 0;
+  let startDiag = $state<{
+    prevPlaying: boolean;
+    schedDelay: number;
+    toSched: number;
+    toInvoke: number;
+    toStart: number;
+    blocked?: boolean;
+  } | null>(null);
+  /** 音量淡变（淡入/淡出）的单 rAF 槽。 */
+  let volRAF: number | null = null;
 
   function clamp(v: number, lo: number, hi: number) {
     return Math.min(hi, Math.max(lo, v));
@@ -61,6 +73,8 @@
     const p = photo;
     void p;
     if (p?.id !== lastPhotoId) {
+      switchAt = performance.now();
+      startDiag = null;
       // 切换前先静音+暂停旧视频，避免有声状态下被硬切产生爆音
       if (videoEl) {
         lastVideoWasPlaying = !videoEl.paused && !videoEl.ended;
@@ -234,8 +248,10 @@
     if (!videoEl) return;
     const el = videoEl;
     const wantSound = !muted;
-    const delay = lastVideoWasPlaying ? 150 : 0;
+    const prevPlaying = lastVideoWasPlaying;
+    const delay = prevPlaying ? 150 : 0;
     lastVideoWasPlaying = false; // 消耗切换标记：只有"从播放中的视频切过来"这一次需要延迟
+    const schedAt = performance.now();
     // loadedmetadata / canplay 会对同一元素重复触发：已有待执行起播则跳过
     if (startTimer && startEl === el) return;
     startEl = el;
@@ -246,11 +262,33 @@
       if (!el || el !== videoEl || videoEnded) return;
       // 先静音起播以兼容自动播放策略，播放真正开始后立即恢复
       el.muted = true;
+      const invokedAt = performance.now();
       el.play()
         .then(() => {
-          if (wantSound && el === videoEl && !muted) el.muted = false;
+          const startedAt = performance.now();
+          startDiag = {
+            prevPlaying,
+            schedDelay: delay,
+            toSched: Math.round(schedAt - switchAt),
+            toInvoke: Math.round(invokedAt - switchAt),
+            toStart: Math.round(startedAt - switchAt),
+          };
+          if (wantSound && el === videoEl && !muted) {
+            el.muted = false;
+            // 音量从 0 短淡入，避免音频瞬间从静音跳到满音量产生爆音
+            el.volume = 0;
+            fadeVolume(el, 1, 50);
+          }
         })
         .catch(() => {
+          startDiag = {
+            prevPlaying,
+            schedDelay: delay,
+            toSched: Math.round(schedAt - switchAt),
+            toInvoke: Math.round(invokedAt - switchAt),
+            toStart: -1,
+            blocked: true,
+          };
           // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
           videoBlocked = true;
         });
@@ -259,12 +297,15 @@
   function onVideoError() {
     videoError = true;
   }
-  /** 播一次：结束后回到封面图；循环模式：重新播放。 */
+  /** 播一次：结束后回到封面图；循环模式：重新播放（音量淡入避免循环点爆音）。 */
   function onVideoEnded() {
     if (playMode === "loop") {
       if (videoEl) {
-        videoEl.currentTime = 0;
-        videoEl.play().catch(() => {});
+        const el = videoEl;
+        el.currentTime = 0;
+        el.volume = muted ? 1 : 0;
+        el.play().catch(() => {});
+        if (!muted) fadeVolume(el, 1, 50);
       }
     } else {
       videoEnded = true;
@@ -272,6 +313,8 @@
   }
   function replay() {
     if (!videoEl) return;
+    switchAt = performance.now();
+    startDiag = null;
     videoEl.currentTime = 0;
     videoEnded = false;
     videoBlocked = false;
@@ -284,7 +327,37 @@
   function toggleMute() {
     muted = !muted;
     // 只切换静音，不主动播放：视频播完后想听声音请点"重播"，否则会静音播放一帧
-    if (videoEl) videoEl.muted = muted;
+    if (videoEl) {
+      videoEl.muted = muted;
+      // 取消静音时如果正处于静音（volume=0）的淡出中，恢复到正常音量
+      if (!muted && videoEl.volume < 1) fadeVolume(videoEl, 1, 50);
+    }
+  }
+  /** 把音量渐变到 target（约 ms 毫秒），单 rAF 槽，避免淡入/淡出互相打架。 */
+  function fadeVolume(el: HTMLVideoElement, target: number, ms: number) {
+    if (volRAF !== null) cancelAnimationFrame(volRAF);
+    const from = el.volume;
+    const start = performance.now();
+    const step = () => {
+      const p = Math.min(1, (performance.now() - start) / ms);
+      el.volume = from + (target - from) * p;
+      if (p < 1 && el === videoEl && !el.paused && !videoEnded) {
+        volRAF = requestAnimationFrame(step);
+      } else {
+        el.volume = target;
+        volRAF = null;
+      }
+    };
+    volRAF = requestAnimationFrame(step);
+  }
+  /** 接近结尾时淡出音量，避免音频在结尾处被硬切产生爆音。 */
+  function onTimeUpdate() {
+    const v = videoEl;
+    if (!v) return;
+    if (muted || v.paused || v.ended) return;
+    if (v.duration > 0 && v.duration - v.currentTime < 0.12 && v.volume > 0.01) {
+      fadeVolume(v, 0, 60);
+    }
   }
 
   function videoLayout() {
@@ -371,6 +444,7 @@
         playsinline
         onloadedmetadata={onVideoMetadata}
         oncanplay={tryPlay}
+        ontimeupdate={onTimeUpdate}
         onerror={onVideoError}
         onended={onVideoEnded}
         style={vl
@@ -428,6 +502,7 @@
       {videoEl}
       {imgLoaded}
       {imgError}
+      timing={startDiag}
     />
   {/if}
 </div>
