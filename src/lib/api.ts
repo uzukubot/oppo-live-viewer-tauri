@@ -6,9 +6,13 @@ export async function scanFolder(folder: string): Promise<PhotoMeta[]> {
   return invoke<PhotoMeta[]>("scan_folder", { folder });
 }
 
-/** 打开单张图片：Rust 读取并切分、缓存字节。 */
-export async function loadPhoto(id: number): Promise<void> {
-  return invoke("load_photo", { id });
+/**
+ * 打开单张图片：Rust 全量读取并切分、缓存字节。
+ * 返回全量解析的准确元数据（video_rotation / is_live / mp4_offset 等），
+ * 供前端回写修正网格扫描时的占位值。
+ */
+export async function loadPhoto(id: number): Promise<PhotoMeta> {
+  return invoke<PhotoMeta>("load_photo", { id });
 }
 
 export interface OpenResult {

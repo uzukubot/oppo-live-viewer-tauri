@@ -3,15 +3,12 @@
   import { app } from "$lib/state.svelte";
   import TopBar from "$lib/components/TopBar.svelte";
   import FolderGrid from "$lib/components/FolderGrid.svelte";
+  import ListView from "$lib/components/ListView.svelte";
   import Viewer from "$lib/components/Viewer.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import Welcome from "$lib/components/Welcome.svelte";
   import { openFolder, openPath } from "$lib/actions";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-
-  const showGrid = $derived(
-    app.view === "grid" && app.photos.length > 0,
-  );
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -37,16 +34,24 @@
   <TopBar />
 
   {#if app.loading}
-    <div class="center">扫描中…</div>
+    <div class="center">
+      {#if app.scanProgress}
+        扫描中… {app.scanProgress.scanned} / {app.scanProgress.total}
+      {:else}
+        扫描中…
+      {/if}
+    </div>
   {:else if !app.folder}
     <Welcome />
   {:else if app.photos.length === 0}
     <div class="center err">{app.error || "没有支持的图片"}</div>
-  {:else if showGrid}
-    <FolderGrid />
-  {:else}
+  {:else if app.view === "viewer"}
     <Viewer />
     <StatusBar />
+  {:else if app.viewMode === "grid"}
+    <FolderGrid />
+  {:else}
+    <ListView />
   {/if}
 
   {#if app.error && app.photos.length > 0}

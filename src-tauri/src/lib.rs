@@ -2,19 +2,17 @@
 mod parser;
 mod store;
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use parser::PhotoMeta;
 use store::{CachedFile, FileStore};
-use tauri::Manager;
+use tauri::{AppHandle, Emitter, Manager};
 
-/// 扫描目录（含排序、注册 id）。供 scan_folder 与 open_path 复用。
-fn scan_dir(dir: &str, st: &mut FileStore) -> Vec<PhotoMeta> {
-    let mut photos = Vec::new();
-    let Ok(dir) = std::fs::read_dir(dir) else {
-        return photos;
-    };
-    let mut paths: Vec<std::path::PathBuf> = dir
+/// 读取目录下的图片路径并自然排序（不涉及 store 锁）。
+fn list_image_paths(dir: &str) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("无法打开文件夹: {e}"))?;
+    let mut paths: Vec<PathBuf> = entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.is_file() && parser::is_supported(p))
@@ -27,23 +25,48 @@ fn scan_dir(dir: &str, st: &mut FileStore) -> Vec<PhotoMeta> {
         );
         natsort::natural_compare(an, bn)
     });
-    for p in paths {
-        let id = st.register_path(&p);
-        if let Ok(meta) = parser::scan_photo(&p, id) {
+    Ok(paths)
+}
+
+/// 扫描目录并返回元数据。运行在后台线程（由 async 命令 + spawn_blocking 调用），
+/// 每 50 个文件通过 `scan-progress` 事件上报进度，UI 不会冻结。
+fn scan_dir(dir: &str, app: &AppHandle) -> Vec<PhotoMeta> {
+    let Ok(paths) = list_image_paths(dir) else {
+        return Vec::new();
+    };
+    let total = paths.len();
+    let mut photos = Vec::with_capacity(total);
+    for (i, p) in paths.iter().enumerate() {
+        let store = app.state::<Mutex<FileStore>>();
+        let id = {
+            let mut st = match store.lock() {
+                Ok(s) => s,
+                Err(_) => return photos,
+            };
+            st.register_path(p)
+        };
+        if let Ok(meta) = parser::scan_photo(p, id) {
             photos.push(meta);
+        }
+        // 进度事件（每 50 个或最后一批）
+        if i % 50 == 49 || i + 1 == total {
+            let _ = app.emit(
+                "scan-progress",
+                serde_json::json!({ "scanned": i + 1, "total": total }),
+            );
         }
     }
     photos
 }
 
 /// 扫描文件夹，返回图片列表（含元数据）。只做轻量解析，不缓存字节。
+/// async + spawn_blocking：不阻塞主线程，几千张图也不会卡死 UI。
 #[tauri::command]
-fn scan_folder(
-    folder: String,
-    store: tauri::State<'_, Mutex<FileStore>>,
-) -> Result<Vec<PhotoMeta>, String> {
-    let mut st = store.lock().map_err(|_| "store 锁损坏".to_string())?;
-    Ok(scan_dir(&folder, &mut st))
+async fn scan_folder(folder: String, app: AppHandle) -> Result<Vec<PhotoMeta>, String> {
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || scan_dir(&folder, &app2))
+        .await
+        .map_err(|e| format!("扫描失败: {e}"))
 }
 
 #[derive(serde::Serialize)]
@@ -55,12 +78,8 @@ struct OpenResult {
 
 /// 打开路径（目录或单个图片文件）：目录则扫描；文件则扫描其所在目录并定位到该文件。
 #[tauri::command]
-fn open_path(
-    path: String,
-    store: tauri::State<'_, Mutex<FileStore>>,
-) -> Result<OpenResult, String> {
+async fn open_path(path: String, app: AppHandle) -> Result<OpenResult, String> {
     let p = std::path::Path::new(&path);
-    let mut st = store.lock().map_err(|_| "store 锁损坏".to_string())?;
     let (folder, target) = if p.is_dir() {
         (path.clone(), None)
     } else if p.is_file() {
@@ -72,7 +91,11 @@ fn open_path(
     } else {
         return Err("路径不存在".to_string());
     };
-    let photos = scan_dir(&folder, &mut st);
+    let app2 = app.clone();
+    let folder2 = folder.clone();
+    let photos = tauri::async_runtime::spawn_blocking(move || scan_dir(&folder2, &app2))
+        .await
+        .map_err(|e| format!("扫描失败: {e}"))?;
     let index = match target {
         Some(t) => photos
             .iter()
@@ -88,19 +111,24 @@ fn open_path(
     })
 }
 
-/// 打开单张图片：全量读取并切分，缓存字节供 URI scheme 提供。
+/// 打开单张图片：全量读取并精确切分，缓存字节供 URI scheme 提供。
+/// 返回全量解析的准确元数据（video_rotation / is_live / mp4_offset 等），
+/// 供前端回写修正网格扫描时未填的字段。
 #[tauri::command]
-fn load_photo(id: u64, store: tauri::State<'_, Mutex<FileStore>>) -> Result<(), String> {
+async fn load_photo(
+    id: u64,
+    store: tauri::State<'_, Mutex<FileStore>>,
+) -> Result<PhotoMeta, String> {
     let path = {
         let st = store.lock().map_err(|_| "store 锁损坏".to_string())?;
         st.path(id).map(|s| s.to_string())
     }
     .ok_or_else(|| format!("未知 id: {id}"))?;
-    let (jpeg, mp4) = parser::split_file(std::path::Path::new(&path))
+    let (meta, jpeg, mp4) = parser::full_meta(std::path::Path::new(&path), id)
         .map_err(|e| format!("读取文件失败: {e}"))?;
     let mut st = store.lock().map_err(|_| "store 锁损坏".to_string())?;
     st.insert(id, CachedFile { jpeg, mp4 });
-    Ok(())
+    Ok(meta)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

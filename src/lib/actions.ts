@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import { openPath as apiOpenPath, scanFolder } from "./api";
 import { app, setPhotos } from "./state.svelte";
 import { photoCache } from "./viewer/photoCache";
@@ -14,12 +15,28 @@ export async function pickFolder() {
   }
 }
 
+/** 在扫描期间监听进度事件，并在结束后清理。 */
+async function withScanProgress<T>(fn: () => Promise<T>): Promise<T> {
+  const unlisten = await listen<{ scanned: number; total: number }>(
+    "scan-progress",
+    (e) => {
+      app.scanProgress = e.payload;
+    },
+  );
+  try {
+    return await fn();
+  } finally {
+    app.scanProgress = null;
+    unlisten();
+  }
+}
+
 /** 打开指定文件夹并扫描图片。 */
 export async function openFolder(folder: string) {
   app.loading = true;
   app.error = "";
   try {
-    const photos = await scanFolder(folder);
+    const photos = await withScanProgress(() => scanFolder(folder));
     photoCache.clear();
     setPhotos(folder, photos);
     rememberFolder(folder);
@@ -47,7 +64,7 @@ export async function openPath(path: string) {
   app.loading = true;
   app.error = "";
   try {
-    const res = await apiOpenPath(path);
+    const res = await withScanProgress(() => apiOpenPath(path));
     photoCache.clear();
     setPhotos(res.folder, res.photos);
     rememberFolder(res.folder);

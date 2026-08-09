@@ -34,15 +34,19 @@
     return Math.min(cssW / iw, cssH / ih);
   }
 
-  // 切换照片时重置视图状态
+  // 切换照片（按 id）时重置视图状态；load_photo 回写元数据（同一 id）不重置
+  let lastPhotoId: number | null = null;
   $effect(() => {
     const p = photo;
     void p;
-    zoom = 1;
-    pan = { x: 0, y: 0 };
-    videoUrl = null;
-    videoError = false;
-    videoDims = null;
+    if (p?.id !== lastPhotoId) {
+      lastPhotoId = p?.id ?? null;
+      zoom = 1;
+      pan = { x: 0, y: 0 };
+      videoUrl = null;
+      videoError = false;
+      videoDims = null;
+    }
     if (p?.is_live) {
       const pid = p.id;
       photoCache.ensureMp4Url(p).then((u) => {

@@ -1,6 +1,7 @@
 import { loadPhoto } from "../api";
 import { fetchBlob, decodeBitmap } from "../protocol";
 import type { PhotoMeta } from "../types";
+import { app } from "../state.svelte";
 
 interface Entry {
   blob?: Blob;
@@ -64,7 +65,13 @@ class PhotoCache {
     }
     this.inFlight.add(meta.id);
     const promise = (async () => {
-      await loadPhoto(meta.id);
+      // 全量解析返回准确元数据（video_rotation / is_live / mp4_offset），
+      // 回写修正网格扫描时的占位值（同一 id 不会重置查看器缩放/视频状态）。
+      const updated = await loadPhoto(meta.id);
+      const idx = app.photos.findIndex((p) => p.id === meta.id);
+      if (idx >= 0) {
+        app.photos[idx] = { ...app.photos[idx], ...updated };
+      }
       return fetchBlob(meta.id, "jpeg");
     })();
     let entry = this.entries.get(meta.id);

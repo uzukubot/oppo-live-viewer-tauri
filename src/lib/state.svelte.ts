@@ -9,6 +9,10 @@ export const app = $state({
   loading: false,
   error: "" as string,
   lastOpened: "" as string,
+  /** 扫描进度（来自 Rust scan-progress 事件）。 */
+  scanProgress: null as { scanned: number; total: number } | null,
+  /** 文件夹浏览模式：默认文件名列表（省资源），缩略图网格需手动开启。 */
+  viewMode: "list" as "list" | "grid",
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {

@@ -125,14 +125,10 @@ fn parse_video_rotation(mp4: &[u8]) -> u16 {
     (rounded as i32).rem_euclid(360) as u16
 }
 
-fn read_exif(path: &Path) -> (u16, Option<String>) {
-    let file = match std::fs::File::open(path) {
-        Ok(f) => f,
-        Err(_) => return (1, None),
-    };
-    let mut reader = std::io::BufReader::new(file);
+fn exif_from_bytes(buf: &[u8]) -> (u16, Option<String>) {
+    let mut cursor = std::io::Cursor::new(buf);
     let exif_reader = exif::Reader::new();
-    let exif = match exif_reader.read_from_container(&mut reader) {
+    let exif = match exif_reader.read_from_container(&mut cursor) {
         Ok(e) => e,
         Err(_) => return (1, None),
     };
@@ -150,7 +146,35 @@ fn read_exif(path: &Path) -> (u16, Option<String>) {
     (orientation, date)
 }
 
-/// 扫描文件夹时使用：只读有限字节（≤8MB）拿到所有元数据，避免全量读大文件。
+/// 在字节缓冲区中检测 Ultra HDR 并提取 gain map 参数（仅用于徽标展示）。
+fn ultra_hdr_from_bytes(buf: &[u8]) -> Option<UltraHdrMeta> {
+    let mut uh = UltraHdrMeta::default();
+    uh.has_xmp_hdrgm = find_bytes(buf, b"hdrgm").is_some();
+    uh.has_iso_21496 = find_bytes(buf, b"GainMapVersion").is_some();
+    if !(uh.has_xmp_hdrgm || uh.has_iso_21496) {
+        return None;
+    }
+    let text = String::from_utf8_lossy(buf);
+    uh.gain_map_min = xmp_number(&text, "GainMapMin");
+    uh.gain_map_max = xmp_number(&text, "GainMapMax");
+    uh.gamma = xmp_number(&text, "Gamma");
+    Some(uh)
+}
+
+fn is_live_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.to_ascii_lowercase().ends_with(".live.jpeg"))
+        .unwrap_or(false)
+}
+
+/// 扫描时读取的字节数：含 XMP（~32KB 处）与 EXIF APP1，足以完成检测。
+/// 不在此处全量读取（旧版每张读 ≤8MB，几千张图会卡死）。
+const SCAN_CHUNK: usize = 128 * 1024;
+
+/// 扫描文件夹时使用（轻量）：只读文件头 + 首 128KB，快速拿到元数据。
+/// is_live 通过文件名 / XMP MotionPhoto 检测；精确的 MP4 偏移与视频旋转角
+/// 在打开单图时由 [`full_meta`] 补齐。
 pub fn scan_photo(path: &Path, id: u64) -> std::io::Result<PhotoMeta> {
     let name = path
         .file_name()
@@ -162,56 +186,67 @@ pub fn scan_photo(path: &Path, id: u64) -> std::io::Result<PhotoMeta> {
     let (width, height) = imagesize::size(path)
         .map(|s| (s.width as u32, s.height as u32))
         .unwrap_or((0, 0));
-    let (orientation, date) = read_exif(path);
 
-    // 分块读取，上限 8MB。XMP/EXIF 在文件开头，`ftyp` 标记通常在视频嵌入处。
-    const CAP: usize = 8 * 1024 * 1024;
     let mut buf = Vec::new();
     {
         let mut f = std::fs::File::open(path)?;
-        let mut chunk = vec![0u8; 1024 * 1024];
-        loop {
-            let n = f.read(&mut chunk)?;
-            if n == 0 {
-                break;
-            }
-            buf.extend_from_slice(&chunk[..n]);
-            if buf.len() >= CAP {
-                break;
-            }
-        }
+        let mut chunk = vec![0u8; SCAN_CHUNK];
+        let n = f.read(&mut chunk)?;
+        buf.extend_from_slice(&chunk[..n]);
     }
-
-    // Live Photo 检测：XMP GContainer 列出 MotionPhoto 条目，或发现 ftyp 标记。
-    let mut is_live = find_bytes(&buf, b"MotionPhoto").is_some();
-    let mp4_offset = find_mp4_offset(&buf);
-    if mp4_offset.is_some() {
-        is_live = true;
-    }
-    let video_rotation = match mp4_offset {
-        Some(off) => parse_video_rotation(&buf[off..]),
-        None => 0,
-    };
-
-    // Ultra HDR 检测 + gain map 参数提取。
-    // 主图 XMP 在文件开头声明 hdrgm 命名空间；gain map 参数（GainMapMax 等）
-    // 位于 gain map JPEG 自身的 XMP 中，因此在整个扫描缓冲区内搜索。
-    let mut uh = UltraHdrMeta::default();
-    uh.has_xmp_hdrgm = find_bytes(&buf, b"hdrgm").is_some();
-    uh.has_iso_21496 = find_bytes(&buf, b"GainMapVersion").is_some();
-    if uh.has_xmp_hdrgm || uh.has_iso_21496 {
-        let text = String::from_utf8_lossy(&buf);
-        uh.gain_map_min = xmp_number(&text, "GainMapMin");
-        uh.gain_map_max = xmp_number(&text, "GainMapMax");
-        uh.gamma = xmp_number(&text, "Gamma");
-    }
-    let ultra_hdr = if uh.has_xmp_hdrgm || uh.has_iso_21496 {
-        Some(uh)
-    } else {
-        None
-    };
+    let (orientation, date) = exif_from_bytes(&buf);
+    let is_live = is_live_name(path) || find_bytes(&buf, b"MotionPhoto").is_some();
 
     Ok(PhotoMeta {
+        id,
+        path: path.to_string_lossy().into_owned(),
+        name,
+        width,
+        height,
+        orientation,
+        is_live,
+        mp4_offset: None,
+        video_rotation: 0,
+        size,
+        date,
+        ultra_hdr: ultra_hdr_from_bytes(&buf),
+    })
+}
+
+/// 打开单图时使用（全量）：读取完整文件，精确切分为 JPEG/MP4，返回准确元数据
+/// （含 is_live / mp4_offset / video_rotation / 完整 gain map 参数）。
+/// JPEG 部分（含 Ultra HDR gain map 与 XMP/MPF）直接交给浏览器。
+pub fn full_meta(path: &Path, id: u64) -> std::io::Result<(PhotoMeta, Vec<u8>, Option<Vec<u8>>)> {
+    let data = std::fs::read(path)?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+    let size = std::fs::metadata(path)?.len();
+    let (width, height) = imagesize::size(path)
+        .map(|s| (s.width as u32, s.height as u32))
+        .unwrap_or((0, 0));
+    // 先借用 data 解析元数据，之后再 move 切分
+    let (orientation, date) = exif_from_bytes(&data);
+    let ultra_hdr = ultra_hdr_from_bytes(&data);
+
+    let mp4_offset = find_mp4_offset(&data);
+    let (jpeg, mp4) = match mp4_offset {
+        Some(off) => {
+            let mut jpeg = data[..off].to_vec();
+            // 剪掉 gain map EOI 之后的零填充，得到干净的 JPEG。
+            if let Some(eoi) = rfind_bytes(&jpeg, &[0xFF, 0xD9]) {
+                jpeg.truncate(eoi + 2);
+            }
+            (jpeg, Some(data[off..].to_vec()))
+        }
+        None => (data, None),
+    };
+    let is_live = mp4.is_some();
+    let video_rotation = mp4.as_deref().map(parse_video_rotation).unwrap_or(0);
+
+    let meta = PhotoMeta {
         id,
         path: path.to_string_lossy().into_owned(),
         name,
@@ -224,25 +259,8 @@ pub fn scan_photo(path: &Path, id: u64) -> std::io::Result<PhotoMeta> {
         size,
         date,
         ultra_hdr,
-    })
-}
-
-/// 打开单张图片时使用：全量读取并精确切分为 JPEG 部分与 MP4 部分。
-/// JPEG 部分（含 Ultra HDR gain map 与 XMP/MPF）直接交给浏览器，
-/// 浏览器会自行决定 SDR / HDR 渲染。
-pub fn split_file(path: &Path) -> std::io::Result<(Vec<u8>, Option<Vec<u8>>)> {
-    let data = std::fs::read(path)?;
-    match find_mp4_offset(&data) {
-        Some(off) => {
-            let mut jpeg = data[..off].to_vec();
-            // 剪掉 gain map EOI 之后的零填充，得到干净的 JPEG。
-            if let Some(eoi) = rfind_bytes(&jpeg, &[0xFF, 0xD9]) {
-                jpeg.truncate(eoi + 2);
-            }
-            Ok((jpeg, Some(data[off..].to_vec())))
-        }
-        None => Ok((data, None)),
-    }
+    };
+    Ok((meta, jpeg, mp4))
 }
 
 #[cfg(test)]
@@ -252,33 +270,37 @@ mod tests {
     const TEST_FILE: &str = "/home/yezichao/.openclaw/workspace/20260227-144315.live.jpeg";
 
     #[test]
-    fn scan_parses_ultra_hdr_live_photo() {
+    fn scan_parses_ultra_hdr_live_photo_lightweight() {
         let path = Path::new(TEST_FILE);
         if !path.exists() {
             eprintln!("跳过：测试文件不存在");
             return;
         }
+        // 轻量扫描：应快速检测到 Ultra HDR 与 Live（不依赖全量读取）
         let meta = scan_photo(path, 42).expect("scan_photo 失败");
         assert_eq!(meta.width, 3456);
         assert_eq!(meta.height, 4608);
         assert!(meta.is_live, "应检测为 Live Photo");
-        assert!(meta.mp4_offset.is_some());
         let uh = meta.ultra_hdr.expect("应检测到 Ultra HDR");
         assert!(uh.has_xmp_hdrgm);
-        assert!(uh.gain_map_max.is_some(), "应提取到 GainMapMax");
-        if let Some(max) = uh.gain_map_max {
-            assert!((max - 1.26315).abs() < 0.001, "GainMapMax={max}");
-        }
     }
 
     #[test]
-    fn split_yields_jpeg_and_mp4() {
+    fn full_parse_yields_accurate_meta_jpeg_and_mp4() {
         let path = Path::new(TEST_FILE);
         if !path.exists() {
             eprintln!("跳过：测试文件不存在");
             return;
         }
-        let (jpeg, mp4) = split_file(path).expect("split_file 失败");
+        let (meta, jpeg, mp4) = full_meta(path, 42).expect("full_meta 失败");
+        // 全量解析应得到精确的 MP4 偏移 / 旋转角 / gain map 参数
+        assert!(meta.is_live);
+        assert!(meta.mp4_offset.is_some());
+        assert_eq!(meta.video_rotation, 0);
+        let uh = meta.ultra_hdr.expect("应检测到 Ultra HDR");
+        if let Some(max) = uh.gain_map_max {
+            assert!((max - 1.26315).abs() < 0.001, "GainMapMax={max}");
+        }
         let mp4 = mp4.expect("应切出 MP4");
         // JPEG 部分应为合法 JPEG（以 SOI 开头，以 EOI 结尾）
         assert!(jpeg.starts_with(&[0xFF, 0xD8]));
