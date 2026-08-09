@@ -221,21 +221,29 @@
     videoDims = { w: videoEl.videoWidth, h: videoEl.videoHeight };
     tryPlay();
   }
-  /** 显式设置 muted 后播放（避免 autoplay 因未静音被拦）。 */
+  /** 显式设置 muted 后播放（避免自动播放策略因未静音拦截）。 */
   function tryPlay() {
     playWithAntiPop();
   }
-  /** 起播：仅当上一个视频仍在播放时延迟整个起播（避免新旧声音重叠爆音），
-   * 不损失声音——视频是晚一点开始播，而不是静音一段时间。 */
+  /** 起播：仅当刚从前一个播放中的视频切过来时延迟整段起播（避免新旧声音重叠爆音）。
+   * 切换标记只在切换瞬间有效，起播即消耗，之后的重播/循环不再延迟。 */
+  let startTimer: ReturnType<typeof setTimeout> | null = null;
+  let startEl: HTMLVideoElement | null = null;
   function playWithAntiPop() {
     if (!videoEl) return;
     const el = videoEl;
     const wantSound = !muted;
     const delay = lastVideoWasPlaying ? 150 : 0;
-    setTimeout(() => {
+    lastVideoWasPlaying = false; // 消耗切换标记：只有"从播放中的视频切过来"这一次需要延迟
+    // loadedmetadata / canplay 会对同一元素重复触发：已有待执行起播则跳过
+    if (startTimer && startEl === el) return;
+    startEl = el;
+    clearTimeout(startTimer ?? undefined);
+    startTimer = setTimeout(() => {
+      startTimer = null;
       // 期间可能已切走（videoEl 换了或为空），跳过
       if (!el || el !== videoEl || videoEnded) return;
-      // 先静音起播以兼容 autoplay 策略，播放真正开始后立即恢复（音频起点，无跳变）
+      // 先静音起播以兼容自动播放策略，播放真正开始后立即恢复
       el.muted = true;
       el.play()
         .then(() => {
@@ -356,7 +364,6 @@
       <video
         bind:this={videoEl}
         src={videoUrl}
-        autoplay
         muted={muted}
         playsinline
         onloadedmetadata={onVideoMetadata}
