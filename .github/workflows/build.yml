@@ -7,6 +7,10 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish-tauri:
     permissions:
@@ -15,10 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # Apple Silicon
+          - platform: "macos-latest" # Apple Silicon（用户仅有 ARM Mac）
             args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest" # Intel
-            args: "--target x86_64-apple-darwin"
           - platform: "ubuntu-22.04"
             args: ""
           - platform: "windows-latest"
@@ -43,7 +45,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Rust 缓存
         uses: swatinem/rust-cache@v2
@@ -60,7 +62,7 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: "OPPO Live Viewer v__VERSION__"
-          releaseBody: "各平台安装包：\n- Windows: .msi / .exe (NSIS)\n- macOS: .dmg（aarch64 + x86_64）\n- Linux: .deb / .AppImage"
+          releaseBody: "各平台安装包：\n- Windows: .msi / .exe (NSIS)\n- macOS: .dmg（Apple Silicon aarch64）\n- Linux: .deb / .AppImage"
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
