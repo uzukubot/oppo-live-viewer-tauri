@@ -53,6 +53,41 @@
     return `width:${w}px;height:${h}px;left:${(cssW - w) / 2 + pan.x}px;top:${(cssH - h) / 2 + pan.y}px;`;
   });
 
+  // HDR 实验：canvas(display-p3) 渲染路径，把 <img> 画进宽色域 canvas
+  let imgEl = $state<HTMLImageElement | null>(null);
+  let hdrCanvas = $state<HTMLCanvasElement | null>(null);
+  let hdrCtx: CanvasRenderingContext2D | null = null;
+  $effect(() => {
+    if (app.hdrMode !== "canvas") return;
+    void fit;
+    void zoom;
+    void pan.x;
+    void pan.y;
+    void cssW;
+    void cssH;
+    void dpr;
+    void imgLoaded;
+    void imgEl;
+    if (!hdrCanvas || !imgEl || !imgLoaded || !fit) return;
+    if (!hdrCtx) {
+      hdrCtx =
+        hdrCanvas.getContext("2d", { colorSpace: "display-p3" }) ??
+        hdrCanvas.getContext("2d");
+    }
+    if (!hdrCtx) return;
+    hdrCanvas.width = Math.max(1, Math.round(cssW * dpr));
+    hdrCanvas.height = Math.max(1, Math.round(cssH * dpr));
+    hdrCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    hdrCtx.clearRect(0, 0, cssW, cssH);
+    const s = fit.scale * zoom;
+    const w = fit.iw * s;
+    const h = fit.ih * s;
+    const x = (cssW - w) / 2 + pan.x;
+    const y = (cssH - h) / 2 + pan.y;
+    hdrCtx.imageSmoothingQuality = "high";
+    hdrCtx.drawImage(imgEl, x, y, w, h);
+  });
+
   // 切换照片（按 id）时重置视图与视频状态；load_photo 回写元数据（同 id）不重置
   let lastPhotoId: number | null = null;
   $effect(() => {
@@ -289,6 +324,7 @@
   {#if photo}
     {#if imgSrc}
       <img
+        bind:this={imgEl}
         class="view-img"
         src={imgSrc}
         style={imgStyle}
@@ -297,6 +333,9 @@
         onload={() => (imgLoaded = true)}
         onerror={() => (imgError = true)}
       />
+    {/if}
+    {#if app.hdrMode === "canvas"}
+      <canvas class="hdr-canvas" bind:this={hdrCanvas}></canvas>
     {/if}
     {#if !imgLoaded && !imgError}
       <div class="loading">加载中…</div>
@@ -408,6 +447,14 @@
     display: block;
     user-select: none;
     -webkit-user-drag: none;
+  }
+
+  .hdr-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
   }
 
   .loading,
