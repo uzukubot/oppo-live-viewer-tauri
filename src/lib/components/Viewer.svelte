@@ -245,9 +245,10 @@
 
   function videoLayout() {
     if (!videoDims) return null;
-    const deg = photo?.video_rotation ?? 0;
     let dw = videoDims.w;
     let dh = videoDims.h;
+    if (dw <= 0 || dh <= 0) return null; // 元数据未就绪或解码失败
+    const deg = photo?.video_rotation ?? 0;
     if (deg === 90 || deg === 270) {
       const t = dw;
       dw = dh;
@@ -306,7 +307,7 @@
     <div
       class="video-box"
       class:hidden={!vl || videoEnded}
-      style={vl ? "width:{vl.boxW}px;height:{vl.boxH}px;" : ""}
+      style={vl ? `width:${vl.boxW}px;height:${vl.boxH}px;` : ""}
     >
       <video
         bind:this={videoEl}
@@ -319,7 +320,7 @@
         onerror={onVideoError}
         onended={onVideoEnded}
         style={vl
-          ? "width:{vl.vidW}px;height:{vl.vidH}px;transform:translate(-50%,-50%) rotate({vl.deg}deg);"
+          ? `width:${vl.vidW}px;height:${vl.vidH}px;transform:translate(-50%,-50%) rotate(${vl.deg}deg);`
           : "width:1px;height:1px;transform:translate(-50%,-50%);"}
       ></video>
     </div>
