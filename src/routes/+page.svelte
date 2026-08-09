@@ -148,7 +148,7 @@
 
   .expand-btn {
     position: absolute;
-    top: 10px;
+    top: 56px;
     left: 10px;
     z-index: 10;
     border: 1px solid #34373d;

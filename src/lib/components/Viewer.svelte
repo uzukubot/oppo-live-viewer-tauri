@@ -328,7 +328,7 @@
     <div class="msg err">Live 视频无法播放（可能缺少 HEVC 解码器）</div>
   {/if}
 
-  <div class="badges" style={!app.sidebarVisible ? "left:56px;" : ""}>
+  <div class="badges">
     {#if photo?.is_live}
       <span class="badge live">LIVE</span>
     {/if}
