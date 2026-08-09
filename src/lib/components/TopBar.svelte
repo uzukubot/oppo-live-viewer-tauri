@@ -3,7 +3,7 @@
   import { pickFolder } from "$lib/actions";
 
   const inViewer = $derived(app.view === "viewer");
-  const inFolder = $derived(!app.loading && app.folder && app.view !== "viewer");
+  const inFolder = $derived(!!app.folder && app.view !== "viewer");
 </script>
 
 <header class="topbar">

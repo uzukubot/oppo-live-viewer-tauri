@@ -6,11 +6,12 @@ export const app = $state({
   folder: "",
   index: 0,
   view: "grid" as "grid" | "viewer",
-  loading: false,
   error: "" as string,
   lastOpened: "" as string,
-  /** 扫描进度（来自 Rust scan-progress 事件）。 */
-  scanProgress: null as { scanned: number; total: number } | null,
+  /** 是否仍在流式扫描（列表会边扫边追加）。 */
+  scanning: false,
+  /** 文件夹内图片总数（来自 start_scan / open_path）。 */
+  scanTotal: 0,
   /** 文件夹浏览模式：默认文件名列表（省资源），缩略图网格需手动开启。 */
   viewMode: "list" as "list" | "grid",
 });

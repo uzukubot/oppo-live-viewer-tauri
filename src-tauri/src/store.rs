@@ -2,13 +2,20 @@
 //! 避免每次 fetch 都重读磁盘。
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct CachedFile {
     /// JPEG 部分（含 gain map / XMP / MPF），可直接交给浏览器。
     pub jpeg: Vec<u8>,
     /// 内嵌 MP4（若为 Live Photo）。
     pub mp4: Option<Vec<u8>>,
+}
+
+/// 流式扫描状态：记录已扫描到的位置，供后台线程继续。
+pub struct ScanState {
+    pub paths: Vec<PathBuf>,
+    pub index: usize,
+    pub generation: u64,
 }
 
 pub struct FileStore {
@@ -19,6 +26,9 @@ pub struct FileStore {
     order: Vec<u64>,
     cap: usize,
     next_id: u64,
+    /// 进行中的扫描（若有）。新扫描会替换并递增 generation，旧扫描线程据此停止。
+    pub scan: Option<ScanState>,
+    pub generation: u64,
 }
 
 impl FileStore {
@@ -29,6 +39,8 @@ impl FileStore {
             order: Vec::new(),
             cap,
             next_id: 1,
+            scan: None,
+            generation: 0,
         }
     }
 

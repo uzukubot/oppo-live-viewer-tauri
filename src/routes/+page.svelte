@@ -33,18 +33,8 @@
 <div class="app">
   <TopBar />
 
-  {#if app.loading}
-    <div class="center">
-      {#if app.scanProgress}
-        扫描中… {app.scanProgress.scanned} / {app.scanProgress.total}
-      {:else}
-        扫描中…
-      {/if}
-    </div>
-  {:else if !app.folder}
+  {#if !app.folder}
     <Welcome />
-  {:else if app.photos.length === 0}
-    <div class="center err">{app.error || "没有支持的图片"}</div>
   {:else if app.view === "viewer"}
     <Viewer />
     <StatusBar />
@@ -54,7 +44,7 @@
     <ListView />
   {/if}
 
-  {#if app.error && app.photos.length > 0}
+  {#if app.error && app.folder}
     <div class="toast">{app.error}</div>
   {/if}
 </div>
@@ -66,18 +56,6 @@
     height: 100vh;
     background: #121212;
     color: #e8e8e8;
-  }
-
-  .center {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #8a8f98;
-    font-size: 14px;
-  }
-  .center.err {
-    color: #f08787;
   }
 
   .toast {

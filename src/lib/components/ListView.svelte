@@ -90,6 +90,10 @@
       </button>
     {/each}
   </div>
+
+  {#if app.scanning}
+    <div class="scan-footer">已加载 {app.photos.length} / {app.scanTotal}，正在扫描…</div>
+  {/if}
 </div>
 
 <style>
@@ -110,6 +114,17 @@
 
   .inner {
     position: relative;
+  }
+
+  .scan-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 18px;
+    font-size: 12px;
+    color: #8a8f98;
+    background: linear-gradient(transparent, #121212 40%);
+    text-align: center;
+    pointer-events: none;
   }
 
   .row {

@@ -28,57 +28,107 @@ fn list_image_paths(dir: &str) -> Result<Vec<PathBuf>, String> {
     Ok(paths)
 }
 
-/// 扫描目录并返回元数据。运行在后台线程（由 async 命令 + spawn_blocking 调用），
-/// 每 50 个文件通过 `scan-progress` 事件上报进度，UI 不会冻结。
-fn scan_dir(dir: &str, app: &AppHandle) -> Vec<PhotoMeta> {
-    let Ok(paths) = list_image_paths(dir) else {
-        return Vec::new();
-    };
-    let total = paths.len();
-    let mut photos = Vec::with_capacity(total);
-    for (i, p) in paths.iter().enumerate() {
-        let store = app.state::<Mutex<FileStore>>();
-        let id = {
-            let mut st = match store.lock() {
+/// 后台扫描线程：从 store 的扫描状态中逐文件取出路径，解析元数据，
+/// 每 25 个通过 `scan-batch` 事件推给前端（前端边收边追加，列表立即可用）。
+/// 代际（generation）不匹配时（用户切换了文件夹）立即停止。
+fn scan_stream(app: &AppHandle, folder: &str, generation: u64) {
+    const BATCH: usize = 25;
+    let mut batch: Vec<PhotoMeta> = Vec::with_capacity(BATCH);
+    loop {
+        let item = {
+            let state = app.state::<Mutex<FileStore>>();
+            let mut st = match state.lock() {
                 Ok(s) => s,
-                Err(_) => return photos,
+                Err(_) => return,
             };
-            st.register_path(p)
+            let path = {
+                let Some(scan) = st.scan.as_mut() else {
+                    return;
+                };
+                if scan.generation != generation {
+                    return; // 已被新扫描取代
+                }
+                if scan.index >= scan.paths.len() {
+                    break;
+                }
+                let p = scan.paths[scan.index].clone();
+                scan.index += 1;
+                p
+            };
+            let id = st.register_path(&path);
+            (id, path)
         };
-        if let Ok(meta) = parser::scan_photo(p, id) {
-            photos.push(meta);
-        }
-        // 进度事件（每 50 个或最后一批）
-        if i % 50 == 49 || i + 1 == total {
-            let _ = app.emit(
-                "scan-progress",
-                serde_json::json!({ "scanned": i + 1, "total": total }),
-            );
+        if let Ok(meta) = parser::scan_photo(&item.1, item.0) {
+            batch.push(meta);
+            if batch.len() >= BATCH {
+                let _ = app.emit(
+                    "scan-batch",
+                    serde_json::json!({ "folder": folder, "photos": batch }),
+                );
+                batch.clear();
+            }
         }
     }
-    photos
+    if !batch.is_empty() {
+        let _ = app.emit(
+            "scan-batch",
+            serde_json::json!({ "folder": folder, "photos": batch }),
+        );
+    }
+    let _ = app.emit("scan-done", serde_json::json!({ "folder": folder }));
 }
 
-/// 扫描文件夹，返回图片列表（含元数据）。只做轻量解析，不缓存字节。
-/// async + spawn_blocking：不阻塞主线程，几千张图也不会卡死 UI。
-#[tauri::command]
-async fn scan_folder(folder: String, app: AppHandle) -> Result<Vec<PhotoMeta>, String> {
+/// 记录扫描状态并在后台启动流式扫描，立即返回总数（不阻塞、不全量扫描）。
+fn begin_scan(app: &AppHandle, folder: &str, paths: Vec<PathBuf>) -> usize {
+    let total = paths.len();
+    let generation = {
+        let state = app.state::<Mutex<FileStore>>();
+        let mut st = match state.lock() {
+            Ok(s) => s,
+            Err(_) => return total,
+        };
+        st.generation += 1;
+        st.scan = Some(store::ScanState {
+            paths,
+            index: 0,
+            generation: st.generation,
+        });
+        st.generation
+    };
     let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || scan_dir(&folder, &app2))
+    let folder2 = folder.to_string();
+    tauri::async_runtime::spawn_blocking(move || scan_stream(&app2, &folder2, generation));
+    total
+}
+
+#[derive(serde::Serialize)]
+struct ScanStart {
+    folder: String,
+    total: usize,
+}
+
+/// 开始流式扫描文件夹：立即返回总数，后台逐批推送 scan-batch / scan-done 事件。
+#[tauri::command]
+async fn start_scan(folder: String, app: AppHandle) -> Result<ScanStart, String> {
+    let folder2 = folder.clone();
+    let paths = tauri::async_runtime::spawn_blocking(move || list_image_paths(&folder2))
         .await
-        .map_err(|e| format!("扫描失败: {e}"))
+        .map_err(|e| format!("扫描失败: {e}"))??;
+    let total = begin_scan(&app, &folder, paths);
+    Ok(ScanStart { folder, total })
 }
 
 #[derive(serde::Serialize)]
 struct OpenResult {
     folder: String,
     index: i64,
-    photos: Vec<PhotoMeta>,
+    total: usize,
 }
 
-/// 打开路径（目录或单个图片文件）：目录则扫描；文件则扫描其所在目录并定位到该文件。
+/// 打开路径（目录或单个图片文件）：计算所在目录与目标在排序列表中的索引，
+/// 但**不**启动扫描（由前端随后调用 start_scan 流式填充）。
 #[tauri::command]
-async fn open_path(path: String, app: AppHandle) -> Result<OpenResult, String> {
+async fn open_path(path: String) -> Result<OpenResult, String> {
     let p = std::path::Path::new(&path);
     let (folder, target) = if p.is_dir() {
         (path.clone(), None)
@@ -91,15 +141,15 @@ async fn open_path(path: String, app: AppHandle) -> Result<OpenResult, String> {
     } else {
         return Err("路径不存在".to_string());
     };
-    let app2 = app.clone();
     let folder2 = folder.clone();
-    let photos = tauri::async_runtime::spawn_blocking(move || scan_dir(&folder2, &app2))
+    let paths = tauri::async_runtime::spawn_blocking(move || list_image_paths(&folder2))
         .await
-        .map_err(|e| format!("扫描失败: {e}"))?;
+        .map_err(|e| format!("扫描失败: {e}"))??;
+    let total = paths.len();
     let index = match target {
-        Some(t) => photos
+        Some(t) => paths
             .iter()
-            .position(|m| m.path == t)
+            .position(|p| p.to_string_lossy() == t)
             .map(|i| i as i64)
             .unwrap_or(0),
         None => 0,
@@ -107,7 +157,7 @@ async fn open_path(path: String, app: AppHandle) -> Result<OpenResult, String> {
     Ok(OpenResult {
         folder,
         index,
-        photos,
+        total,
     })
 }
 
@@ -181,7 +231,7 @@ pub fn run() {
                 .body(bytes)
                 .unwrap()
         })
-        .invoke_handler(tauri::generate_handler![scan_folder, load_photo, open_path])
+        .invoke_handler(tauri::generate_handler![start_scan, load_photo, open_path])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
