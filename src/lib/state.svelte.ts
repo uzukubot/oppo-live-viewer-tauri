@@ -21,8 +21,6 @@ export const app = $state({
   showDiag: false,
   /** 文件名搜索关键词（过滤列表显示）。 */
   search: "",
-  /** HDR 实验：img（默认）或 canvas(display-p3) 渲染路径。 */
-  hdrMode: "img" as "img" | "canvas",
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {

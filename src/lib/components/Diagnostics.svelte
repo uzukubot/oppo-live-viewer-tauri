@@ -54,24 +54,9 @@
     videoEl ? videoEl.canPlayType('video/mp4; codecs="avc1.42E01E"') : "（无视频元素）",
   );
 
-  /** 探测 WebView 是否支持 display-p3 的 2D canvas（判断合成层宽色域能力）。 */
-  const p3Canvas = $derived.by(() => {
-    try {
-      const c = document.createElement("canvas");
-      const ctx = c.getContext("2d", { colorSpace: "display-p3" });
-      if (!ctx) return "不支持";
-      const attrs = ctx.getContextAttributes?.() as { colorSpace?: string } | undefined;
-      return attrs?.colorSpace ?? "已创建(未报告)";
-    } catch {
-      return "异常";
-    }
-  });
-
   function buildInfo(): string {
     const lines = [
       `版本(commit): ${APP_COMMIT}`,
-      `P3 canvas: ${p3Canvas}`,
-      `HDR 渲染模式: ${app.hdrMode}`,
       `平台: ${navigator.userAgent}`,
       `HDR 屏(dynamic-range): ${hdr ? "是" : "否"}`,
       `广色域(p3): ${p3 ? "是" : "否"}`,
@@ -122,28 +107,9 @@
       <button class="close" onclick={() => (app.showDiag = false)}>×</button>
     </div>
   </div>
-  <div class="hdr-toggle">
-    <span>HDR 渲染</span>
-    <div class="seg">
-      <button
-        class="seg-btn {app.hdrMode === 'img' ? 'on' : ''}"
-        onclick={() => (app.hdrMode = "img")}
-      >
-        img
-      </button>
-      <button
-        class="seg-btn {app.hdrMode === 'canvas' ? 'on' : ''}"
-        onclick={() => (app.hdrMode = "canvas")}
-      >
-        canvas-P3
-      </button>
-    </div>
-  </div>
   <table>
     <tbody>
       <tr><th>版本 (commit)</th><td>{APP_COMMIT}</td></tr>
-      <tr><th>P3 canvas</th><td>{p3Canvas}</td></tr>
-      <tr><th>HDR 渲染模式</th><td>{app.hdrMode}</td></tr>
       <tr><th>平台</th><td>{navigator.userAgent.slice(0, 90)}</td></tr>
       <tr><th>HDR 屏 (dynamic-range)</th><td>{hdr ? "是 ✅" : "否 ❌"}</td></tr>
       <tr><th>广色域 (color-gamut p3)</th><td>{p3 ? "是" : "否"}</td></tr>
@@ -199,36 +165,6 @@
     display: flex;
     gap: 6px;
     align-items: center;
-  }
-
-  .hdr-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 8px;
-    color: #8a8f98;
-    font-size: 12px;
-  }
-
-  .seg {
-    display: flex;
-    background: #202227;
-    border: 1px solid #34373d;
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .seg-btn {
-    border: none;
-    background: transparent;
-    color: #8a8f98;
-    padding: 3px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .seg-btn.on {
-    background: #3d6ef7;
-    color: #fff;
   }
 
   .copy {
