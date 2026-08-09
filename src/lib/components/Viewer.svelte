@@ -302,10 +302,10 @@
     <div class="msg">加载图片…</div>
   {/if}
 
-  {#if videoUrl && !videoError && !videoEnded}
+  {#if videoUrl && !videoError}
     <div
       class="video-box"
-      class:hidden={!vl}
+      class:hidden={!vl || videoEnded}
       style={vl ? "width:{vl.boxW}px;height:{vl.boxH}px;" : ""}
     >
       <video

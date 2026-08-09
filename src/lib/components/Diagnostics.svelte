@@ -28,7 +28,14 @@
     typeof matchMedia !== "undefined" && matchMedia("(color-gamut: p3)").matches,
   );
   const hevc = $derived(
-    videoEl ? videoEl.canPlayType('video/mp4; codecs="hvc1"') : "（无视频元素）",
+    videoEl
+      ? videoEl.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"')
+      : "（无视频元素）",
+  );
+  const hev1 = $derived(
+    videoEl
+      ? videoEl.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"')
+      : "（无视频元素）",
   );
   const avc = $derived(
     videoEl ? videoEl.canPlayType('video/mp4; codecs="avc1.42E01E"') : "（无视频元素）",
@@ -46,9 +53,13 @@
       `视频 URL: ${videoUrl ? "已设置" : "未设置"}`,
       `视频错误: ${videoError}`,
       `视频已结束: ${videoEnded}`,
-      `HEVC 支持(hvc1): ${hevc}`,
+      `HEVC 支持(hvc1.1.6): ${hevc}`,
+      `HEVC 支持(hev1.1.6): ${hev1}`,
       `H.264 支持(avc1): ${avc}`,
       `视频尺寸: ${videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}`,
+      `视频状态: ${videoEl
+        ? `readyState=${videoEl.readyState} currentTime=${videoEl.currentTime.toFixed(1)} paused=${videoEl.paused} 错误=${videoEl.error ? videoEl.error.code : "无"}`
+        : "无视频元素"}`,
       `图片已加载: ${imgLoaded}`,
       `图片错误: ${imgError}`,
     ];
@@ -94,9 +105,11 @@
       <tr><th>视频 URL</th><td>{videoUrl ? "已设置" : "未设置"}</td></tr>
       <tr><th>视频错误</th><td>{String(videoError)}</td></tr>
       <tr><th>视频已结束</th><td>{String(videoEnded)}</td></tr>
-      <tr><th>HEVC 支持 (hvc1)</th><td>{hevc}</td></tr>
+      <tr><th>HEVC 支持 (hvc1.1.6)</th><td>{hevc}</td></tr>
+      <tr><th>HEVC 支持 (hev1.1.6)</th><td>{hev1}</td></tr>
       <tr><th>H.264 支持 (avc1)</th><td>{avc}</td></tr>
       <tr><th>视频尺寸</th><td>{videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}</td></tr>
+      <tr><th>视频状态</th><td>{videoEl ? `readyState=${videoEl.readyState} currentTime=${videoEl.currentTime.toFixed(1)} paused=${videoEl.paused} 错误=${videoEl.error ? videoEl.error.code : "无"}` : "无视频元素"}</td></tr>
       <tr><th>图片已加载</th><td>{String(imgLoaded)}</td></tr>
       <tr><th>图片错误</th><td>{String(imgError)}</td></tr>
     </tbody>
