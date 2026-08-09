@@ -112,10 +112,12 @@ pub fn run() {
         .register_uri_scheme_protocol("viewer", |ctx, request| {
             // 处理 viewer://load/{id}/{jpeg|mp4}
             // URL 只含不透明 id，不泄露文件系统路径。
-            let error = |status: u16| tauri::http::Response::builder()
-                .status(status)
-                .body(Vec::new())
-                .unwrap();
+            let error = |status: u16| {
+                tauri::http::Response::builder()
+                    .status(status)
+                    .body(Vec::new())
+                    .unwrap()
+            };
             let decoded = percent_encoding::percent_decode_str(request.uri().path())
                 .decode_utf8_lossy()
                 .into_owned();

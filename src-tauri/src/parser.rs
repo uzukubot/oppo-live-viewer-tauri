@@ -65,9 +65,7 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
     }
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 fn rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -117,12 +115,7 @@ fn parse_video_rotation(mp4: &[u8]) -> u16 {
         return 0;
     }
     let read_i32 = |i: usize| -> i32 {
-        i32::from_be_bytes([
-            mp4[m + i],
-            mp4[m + i + 1],
-            mp4[m + i + 2],
-            mp4[m + i + 3],
-        ])
+        i32::from_be_bytes([mp4[m + i], mp4[m + i + 1], mp4[m + i + 2], mp4[m + i + 3]])
     };
     // matrix = [a b u; c d v; x y w]，a/c 与 b/d 表示旋转
     let a = read_i32(0) as f64 / 65536.0;
@@ -151,10 +144,8 @@ fn read_exif(path: &Path) -> (u16, Option<String>) {
     let date = exif
         .get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
         .and_then(|f| {
-            std::panic::catch_unwind(|| {
-                f.value.display_as(exif::Tag::DateTimeOriginal).to_string()
-            })
-            .ok()
+            std::panic::catch_unwind(|| f.value.display_as(exif::Tag::DateTimeOriginal).to_string())
+                .ok()
         });
     (orientation, date)
 }

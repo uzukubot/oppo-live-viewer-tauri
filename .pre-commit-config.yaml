@@ -1,0 +1,30 @@
+repos:
+  # Gitleaks - 密钥泄露检测
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # 通用检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: '^tsconfig\.json$'
+      - id: check-added-large-files
+        args: ['--maxkb=10000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Rust 代码格式化（项目 Cargo.toml 位于 src-tauri/）
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: bash -c 'source "$HOME/.cargo/env" 2>/dev/null || true; cd src-tauri && cargo fmt -- --check'
+        language: system
+        types: [rust]
+        pass_filenames: false
