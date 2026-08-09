@@ -1,0 +1,29 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b3a67"/>
+      <stop offset="1" stop-color="#0f1524"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6ea0ff"/>
+      <stop offset="1" stop-color="#3d6ef7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角方形背景 -->
+  <rect x="72" y="72" width="880" height="880" rx="216" fill="url(#bg)"/>
+  <rect x="72" y="72" width="880" height="880" rx="216" stroke="white" stroke-opacity="0.09" stroke-width="12"/>
+
+  <!-- 照片取景框 -->
+  <rect x="288" y="288" width="448" height="448" rx="60"
+        fill="white" fill-opacity="0.05"
+        stroke="white" stroke-width="18" stroke-opacity="0.92"/>
+
+  <!-- 取景框内：太阳 + 群山 -->
+  <circle cx="452" cy="424" r="64" fill="url(#accent)"/>
+  <path d="M288 652 L 428 492 L 520 600 L 580 540 L 736 652 Z" fill="url(#accent)"/>
+
+  <!-- 播放三角（Live 标识） -->
+  <circle cx="636" cy="600" r="118" fill="white" fill-opacity="0.12"/>
+  <path d="M604 552 L 692 600 L 604 648 Z" fill="white"/>
+</svg>
