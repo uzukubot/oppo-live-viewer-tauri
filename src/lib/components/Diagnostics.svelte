@@ -54,6 +54,38 @@
     videoEl ? videoEl.canPlayType('video/mp4; codecs="avc1.42E01E"') : "（无视频元素）",
   );
 
+  // 实时读取播放状态（currentTime 是 DOM 属性，不触发重渲染，必须用 timeupdate 驱动）
+  let vNow = $state(0);
+  let vReady = $state(0);
+  let vPaused = $state(true);
+  $effect(() => {
+    const v = videoEl;
+    if (!v) {
+      vNow = 0;
+      vReady = 0;
+      vPaused = true;
+      return;
+    }
+    const update = () => {
+      vNow = v.currentTime;
+      vReady = v.readyState;
+      vPaused = v.paused;
+    };
+    update();
+    v.addEventListener("timeupdate", update);
+    v.addEventListener("play", update);
+    v.addEventListener("pause", update);
+    v.addEventListener("loadedmetadata", update);
+    v.addEventListener("ended", update);
+    return () => {
+      v.removeEventListener("timeupdate", update);
+      v.removeEventListener("play", update);
+      v.removeEventListener("pause", update);
+      v.removeEventListener("loadedmetadata", update);
+      v.removeEventListener("ended", update);
+    };
+  });
+
   function buildInfo(): string {
     const lines = [
       `版本(commit): ${APP_COMMIT}`,
@@ -72,8 +104,9 @@
       `H.264 支持(avc1): ${avc}`,
       `视频尺寸: ${videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}`,
       `视频状态: ${videoEl
-        ? `readyState=${videoEl.readyState} currentTime=${videoEl.currentTime.toFixed(1)} paused=${videoEl.paused} 错误=${videoEl.error ? videoEl.error.code : "无"}`
+        ? `readyState=${vReady} currentTime=${vNow.toFixed(2)} paused=${vPaused} 错误=${videoEl.error ? videoEl.error.code : "无"}`
         : "无视频元素"}`,
+      `已起播: ${vNow > 0 ? "是" : "否"}`,
       `图片已加载: ${imgLoaded}`,
       `图片错误: ${imgError}`,
     ];
@@ -124,7 +157,8 @@
       <tr><th>HEVC 支持 (hev1.1.6)</th><td>{hev1}</td></tr>
       <tr><th>H.264 支持 (avc1)</th><td>{avc}</td></tr>
       <tr><th>视频尺寸</th><td>{videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}</td></tr>
-      <tr><th>视频状态</th><td>{videoEl ? `readyState=${videoEl.readyState} currentTime=${videoEl.currentTime.toFixed(1)} paused=${videoEl.paused} 错误=${videoEl.error ? videoEl.error.code : "无"}` : "无视频元素"}</td></tr>
+      <tr><th>视频状态</th><td>{videoEl ? `readyState=${vReady} currentTime=${vNow.toFixed(2)} paused=${vPaused} 错误=${videoEl.error ? videoEl.error.code : "无"}` : "无视频元素"}</td></tr>
+      <tr><th>已起播</th><td>{vNow > 0 ? "是" : "否"}</td></tr>
       <tr><th>图片已加载</th><td>{String(imgLoaded)}</td></tr>
       <tr><th>图片错误</th><td>{String(imgError)}</td></tr>
     </tbody>
