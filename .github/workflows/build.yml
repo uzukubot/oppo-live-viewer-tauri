@@ -70,6 +70,14 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      # 绿色版：Tauri 把前端资源嵌入 exe，原始 release exe 双击即可直接运行，
+      # 无需安装向导（仅需系统自带的 WebView2 运行时）。
+      - name: 复制绿色版 Windows exe
+        if: matrix.platform == 'windows-latest'
+        run: |
+          mkdir -p portable
+          cp src-tauri/target/release/oppo-live-viewer-tauri.exe portable/OPPO-Live-Viewer-portable-x64.exe
+
       - name: 上传安装包到 Actions Artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -82,4 +90,5 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.rpm
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.app.tar.gz
+            portable/**
           if-no-files-found: warn
