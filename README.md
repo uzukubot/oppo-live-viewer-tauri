@@ -26,10 +26,11 @@ GitHub Actions 会自动构建 Windows / macOS (aarch64) / Linux 三平台安装
 
 ## 文档
 
-- [原始需求](docs/REQUIREMENTS.md)
-- [设计文档](docs/DESIGN.md)
+- [产品需求](docs/REQUIREMENTS.md)
+- [技术设计](docs/DESIGN.md)
+- [已知问题与踩坑记录](docs/KNOWN_ISSUES.md)
 
 ## 技术栈
 
-- Tauri v2（Rust 后端：容器解析 / `viewer://` 协议 / 元数据）
-- Svelte 5 + Vite（前端渲染：canvas + createImageBitmap）
+- Tauri v2（Rust 后端：容器解析 / `viewer://` 协议 / 流式扫描 / 元数据）
+- Svelte 5 + Vite（前端渲染：`<img>` 原生解码 / `<video>` Live / 虚拟滚动列表）
