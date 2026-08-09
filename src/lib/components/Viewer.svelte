@@ -225,27 +225,27 @@
   function tryPlay() {
     playWithAntiPop();
   }
-  /** 起播：先静音启动，若用户有声则恢复声音。仅当上一个视频仍在播放时延迟起播
-   *（避免切换时新旧声音重叠产生爆音）；否则立即恢复，不损失开头声音。 */
+  /** 起播：仅当上一个视频仍在播放时延迟整个起播（避免新旧声音重叠爆音），
+   * 不损失声音——视频是晚一点开始播，而不是静音一段时间。 */
   function playWithAntiPop() {
     if (!videoEl) return;
+    const el = videoEl;
     const wantSound = !muted;
-    videoEl.muted = true;
-    videoEl
-      .play()
-      .then(() => {
-        if (wantSound && videoEl) {
-          const delay = lastVideoWasPlaying ? 150 : 0;
-          setTimeout(() => {
-            // 读取最新 muted 偏好，若用户在等待期间又静音则不再恢复
-            if (videoEl && !muted && !videoEnded) videoEl.muted = false;
-          }, delay);
-        }
-      })
-      .catch(() => {
-        // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
-        videoBlocked = true;
-      });
+    const delay = lastVideoWasPlaying ? 150 : 0;
+    setTimeout(() => {
+      // 期间可能已切走（videoEl 换了或为空），跳过
+      if (!el || el !== videoEl || videoEnded) return;
+      // 先静音起播以兼容 autoplay 策略，播放真正开始后立即恢复（音频起点，无跳变）
+      el.muted = true;
+      el.play()
+        .then(() => {
+          if (wantSound && el === videoEl && !muted) el.muted = false;
+        })
+        .catch(() => {
+          // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
+          videoBlocked = true;
+        });
+    }, delay);
   }
   function onVideoError() {
     videoError = true;
