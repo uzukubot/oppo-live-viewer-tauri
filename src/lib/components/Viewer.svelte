@@ -55,14 +55,19 @@
 
   // 切换照片（按 id）时重置视图与视频状态；load_photo 回写元数据（同 id）不重置
   let lastPhotoId: number | null = null;
+  /** 上一个视频切换时是否正在播放（决定新视频是否延迟起播，避免重叠爆音）。 */
+  let lastVideoWasPlaying = false;
   $effect(() => {
     const p = photo;
     void p;
     if (p?.id !== lastPhotoId) {
       // 切换前先静音+暂停旧视频，避免有声状态下被硬切产生爆音
       if (videoEl) {
+        lastVideoWasPlaying = !videoEl.paused && !videoEl.ended;
         videoEl.muted = true;
         videoEl.pause();
+      } else {
+        lastVideoWasPlaying = false;
       }
       lastPhotoId = p?.id ?? null;
       zoom = 1;
@@ -220,7 +225,8 @@
   function tryPlay() {
     playWithAntiPop();
   }
-  /** 起播：先静音启动，若用户有声则短暂延迟后恢复，避免起始/切换爆音。 */
+  /** 起播：先静音启动，若用户有声则恢复声音。仅当上一个视频仍在播放时延迟起播
+   *（避免切换时新旧声音重叠产生爆音）；否则立即恢复，不损失开头声音。 */
   function playWithAntiPop() {
     if (!videoEl) return;
     const wantSound = !muted;
@@ -229,10 +235,11 @@
       .play()
       .then(() => {
         if (wantSound && videoEl) {
+          const delay = lastVideoWasPlaying ? 150 : 0;
           setTimeout(() => {
             // 读取最新 muted 偏好，若用户在等待期间又静音则不再恢复
             if (videoEl && !muted && !videoEnded) videoEl.muted = false;
-          }, 150);
+          }, delay);
         }
       })
       .catch(() => {
