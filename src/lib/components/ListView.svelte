@@ -9,15 +9,28 @@
   let viewportH = $state(600);
   let lastIndex = -1;
 
-  const total = $derived(app.photos.length);
+  /** 匹配搜索的文件（原始索引）。 */
+  const filtered = $derived.by(() => {
+    const q = app.search.trim().toLowerCase();
+    if (!q) return app.photos.map((_, i) => i);
+    const out: number[] = [];
+    for (let i = 0; i < app.photos.length; i++) {
+      if (app.photos[i].name.toLowerCase().includes(q)) out.push(i);
+    }
+    return out;
+  });
+
+  const total = $derived(filtered.length);
   const totalH = $derived(total * ROW);
   const winStart = $derived(Math.max(0, Math.floor(scrollTop / ROW) - 2));
   const winEnd = $derived(
     Math.min(total - 1, winStart + Math.ceil(viewportH / ROW) + 4),
   );
-  const rows = $derived.by(() => {
-    const out: number[] = [];
-    for (let i = winStart; i <= winEnd; i++) out.push(i);
+  const visible = $derived.by(() => {
+    const out: { pos: number; idx: number }[] = [];
+    for (let p = winStart; p <= winEnd; p++) {
+      out.push({ pos: p, idx: filtered[p] });
+    }
     return out;
   });
 
@@ -32,8 +45,9 @@
     const i = app.index;
     if (i !== lastIndex) {
       lastIndex = i;
-      if (listEl) {
-        const rowTop = i * ROW;
+      const pos = filtered.indexOf(i);
+      if (listEl && pos >= 0) {
+        const rowTop = pos * ROW;
         if (rowTop < listEl.scrollTop || rowTop + ROW > listEl.scrollTop + listEl.clientHeight) {
           listEl.scrollTo({ top: rowTop, behavior: "smooth" });
         }
@@ -52,25 +66,29 @@
 
 <div class="list" bind:this={listEl} onscroll={onScroll}>
   <div class="inner" style="height:{totalH}px;">
-    {#each rows as i (i)}
+    {#each visible as v (v.idx)}
       <button
-        class="row {app.index === i ? 'selected' : ''}"
-        style="top:{i * ROW}px;height:{ROW}px;"
-        onclick={() => show(i)}
+        class="row {app.index === v.idx ? 'selected' : ''}"
+        style="top:{v.pos * ROW}px;height:{ROW}px;"
+        onclick={() => show(v.idx)}
       >
-        <span class="name" title={app.photos[i].name}>{app.photos[i].name}</span>
+        <span class="name" title={app.photos[v.idx].name}>{app.photos[v.idx].name}</span>
         <span class="meta">
-          {#if app.photos[i].is_live}
+          {#if app.photos[v.idx].is_live}
             <span class="tag live">LIVE</span>
           {/if}
-          {#if app.photos[i].ultra_hdr}
+          {#if app.photos[v.idx].ultra_hdr}
             <span class="tag hdr">HDR</span>
           {/if}
-          <span class="dims">{displayDims(app.photos[i]).w}×{displayDims(app.photos[i]).h}</span>
+          <span class="dims">{displayDims(app.photos[v.idx]).w}×{displayDims(app.photos[v.idx]).h}</span>
         </span>
       </button>
     {/each}
   </div>
+
+  {#if total === 0 && !app.scanning}
+    <div class="empty">无匹配文件</div>
+  {/if}
 
   {#if app.scanning}
     <div class="scan-footer">已加载 {app.photos.length} / {app.scanTotal}，正在扫描…</div>
@@ -159,6 +177,13 @@
     color: #5a5e66;
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+  }
+
+  .empty {
+    padding: 24px 12px;
+    text-align: center;
+    color: #5a5e66;
+    font-size: 12.5px;
   }
 
   .scan-footer {

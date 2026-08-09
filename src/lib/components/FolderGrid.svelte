@@ -12,8 +12,19 @@
   let width = $state(0);
   let lastIndex = -1;
 
+  /** 匹配搜索的文件（原始索引）。 */
+  const filtered = $derived.by(() => {
+    const q = app.search.trim().toLowerCase();
+    if (!q) return app.photos.map((_, i) => i);
+    const out: number[] = [];
+    for (let i = 0; i < app.photos.length; i++) {
+      if (app.photos[i].name.toLowerCase().includes(q)) out.push(i);
+    }
+    return out;
+  });
+
   const cols = $derived(Math.max(1, Math.floor((width + GAP) / (CELL + GAP))));
-  const totalRows = $derived(Math.max(0, Math.ceil(app.photos.length / cols)));
+  const totalRows = $derived(Math.max(0, Math.ceil(filtered.length / cols)));
   const totalH = $derived(totalRows * (CELL + GAP) + GAP);
 
   const winStart = $derived(
@@ -30,10 +41,10 @@
     const list: { index: number; x: number; y: number }[] = [];
     for (let r = winStart; r <= winEnd; r++) {
       for (let c = 0; c < cols; c++) {
-        const index = r * cols + c;
-        if (index >= app.photos.length) break;
+        const pos = r * cols + c;
+        if (pos >= filtered.length) break;
         list.push({
-          index,
+          index: filtered[pos],
           x: c * (CELL + GAP) + GAP,
           y: r * (CELL + GAP) + GAP,
         });
@@ -53,8 +64,9 @@
     const i = app.index;
     if (i !== lastIndex) {
       lastIndex = i;
-      if (gridEl && cols > 0) {
-        const rowTop = Math.floor(i / cols) * (CELL + GAP);
+      const pos = filtered.indexOf(i);
+      if (gridEl && cols > 0 && pos >= 0) {
+        const rowTop = Math.floor(pos / cols) * (CELL + GAP);
         if (rowTop < gridEl.scrollTop || rowTop + CELL > gridEl.scrollTop + gridEl.clientHeight) {
           gridEl.scrollTo({ top: rowTop, behavior: "smooth" });
         }
@@ -85,6 +97,10 @@
       </button>
     {/each}
   </div>
+
+  {#if filtered.length === 0 && !app.scanning}
+    <div class="empty">无匹配文件</div>
+  {/if}
 
   {#if app.scanning}
     <div class="scan-footer">已加载 {app.photos.length} / {app.scanTotal}，正在扫描…</div>
@@ -118,6 +134,13 @@
     border: none;
     background: none;
     cursor: pointer;
+  }
+
+  .empty {
+    padding: 24px 12px;
+    text-align: center;
+    color: #5a5e66;
+    font-size: 12.5px;
   }
 
   .scan-footer {

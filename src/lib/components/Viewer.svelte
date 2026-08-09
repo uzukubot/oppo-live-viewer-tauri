@@ -364,7 +364,7 @@
         循环
       </button>
       <button
-        class="ctl {muted ? '' : 'on'}"
+        class="ctl {muted ? 'on' : ''}"
         onclick={toggleMute}
         title="静音开关"
       >

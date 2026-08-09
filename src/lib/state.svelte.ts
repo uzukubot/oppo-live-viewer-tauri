@@ -19,6 +19,8 @@ export const app = $state({
   sidebarWidth: 300,
   /** 诊断面板开关（F12）。 */
   showDiag: false,
+  /** 文件名搜索关键词（过滤列表显示）。 */
+  search: "",
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {

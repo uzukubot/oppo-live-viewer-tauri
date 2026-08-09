@@ -38,6 +38,18 @@
     </button>
   </div>
 
+  <div class="search-row">
+    <input
+      class="search-input"
+      type="text"
+      placeholder="搜索文件名…"
+      bind:value={app.search}
+    />
+    {#if app.search}
+      <button class="clear" onclick={() => (app.search = "")} title="清除">×</button>
+    {/if}
+  </div>
+
   {#if app.viewMode === "grid"}
     <FolderGrid />
   {:else}
@@ -109,5 +121,43 @@
   }
   .collapse:hover {
     background: #2c2f36;
+  }
+
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #26282d;
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #34373d;
+    background: #202227;
+    color: #e8e8e8;
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    outline: none;
+  }
+  .search-input:focus {
+    border-color: #3d6ef7;
+  }
+  .search-input::placeholder {
+    color: #5a5e66;
+  }
+
+  .clear {
+    border: none;
+    background: transparent;
+    color: #8a8f98;
+    font-size: 14px;
+    cursor: pointer;
+    flex: none;
+  }
+  .clear:hover {
+    color: #fff;
   }
 </style>
