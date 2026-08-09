@@ -195,9 +195,10 @@
 
   function onPointerDown(e: PointerEvent) {
     if (zoom <= 1.001) return;
-    // 点按按钮/视频控件时不要启动拖拽（否则 setPointerCapture 会吞掉按钮 click）
+    // 点按按钮/视频控件时不要启动拖拽（否则 setPointerCapture 会吞掉按钮 click）；
+    // 视频区域本身允许拖拽（放大后拖动视频平移）
     const el = e.target as HTMLElement;
-    if (el.closest("button") || el.closest(".video-box") || el.closest(".video-controls")) return;
+    if (el.closest("button") || el.closest(".video-controls")) return;
     dragging = true;
     lastPoint = { x: e.clientX, y: e.clientY };
     stage.setPointerCapture(e.pointerId);
@@ -356,8 +357,10 @@
       style={vl
         ? `left:${vl.x}px;top:${vl.y}px;width:${vl.boxW}px;height:${vl.boxH}px;`
         : ""}
-      onclick={videoBlocked ? replay : toggleMute}
-      onkeydown={(e) => e.key === "Enter" && (videoBlocked ? replay() : toggleMute())}
+      onclick={videoBlocked ? replay : undefined}
+      onkeydown={(e) => {
+        if (e.key === "Enter" && videoBlocked) replay();
+      }}
       role="button"
       tabindex="-1"
     >
