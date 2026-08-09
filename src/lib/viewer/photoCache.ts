@@ -12,7 +12,7 @@ interface Entry {
   loadingBlob?: Promise<Blob>;
 }
 
-const CACHE_CAP = 8;
+const CACHE_CAP = 16;
 
 /**
  * 图片字节/资源缓存。
@@ -53,6 +53,16 @@ class PhotoCache {
     return entry.jpegUrl;
   }
 
+  /** 取字节；若被 LRU 淘汰导致 404，重新 load_photo 预热后再取一次。 */
+  private async loadAndFetch(id: number, part: "jpeg" | "mp4"): Promise<Blob> {
+    try {
+      return await fetchBlob(id, part);
+    } catch {
+      await loadPhoto(id);
+      return await fetchBlob(id, part);
+    }
+  }
+
   /** 确保 id 对应的 JPEG blob 已加载（并预热 Rust 字节缓存）。 */
   async ensureBlob(meta: PhotoMeta): Promise<Blob> {
     let e = this.entries.get(meta.id);
@@ -73,7 +83,7 @@ class PhotoCache {
       if (idx >= 0) {
         app.photos[idx] = { ...app.photos[idx], ...updated };
       }
-      return fetchBlob(meta.id, "jpeg");
+      return this.loadAndFetch(meta.id, "jpeg");
     })();
     if (!this.entries.has(meta.id)) this.entries.set(meta.id, {});
     const entry = this.entries.get(meta.id)!;
@@ -95,7 +105,7 @@ class PhotoCache {
     if (!meta.is_live) return null;
     try {
       await this.ensureBlob(meta); // 确保已 load_photo
-      const blob = await fetchBlob(meta.id, "mp4");
+      const blob = await this.loadAndFetch(meta.id, "mp4");
       if (!this.entries.has(meta.id)) this.entries.set(meta.id, {});
       const entry = this.entries.get(meta.id)!;
       entry.mp4Url = URL.createObjectURL(blob);

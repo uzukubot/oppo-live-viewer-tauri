@@ -184,7 +184,7 @@ async fn load_photo(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Mutex::new(FileStore::new(8)))
+        .manage(Mutex::new(FileStore::new(24)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol("viewer", |ctx, request| {
