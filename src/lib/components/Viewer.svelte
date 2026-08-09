@@ -59,6 +59,11 @@
     const p = photo;
     void p;
     if (p?.id !== lastPhotoId) {
+      // 切换前先静音+暂停旧视频，避免有声状态下被硬切产生爆音
+      if (videoEl) {
+        videoEl.muted = true;
+        videoEl.pause();
+      }
       lastPhotoId = p?.id ?? null;
       zoom = 1;
       pan = { x: 0, y: 0 };
@@ -213,12 +218,27 @@
   }
   /** 显式设置 muted 后播放（避免 autoplay 因未静音被拦）。 */
   function tryPlay() {
+    playWithAntiPop();
+  }
+  /** 起播：先静音启动，若用户有声则短暂延迟后恢复，避免起始/切换爆音。 */
+  function playWithAntiPop() {
     if (!videoEl) return;
-    videoEl.muted = muted;
-    videoEl.play().catch(() => {
-      // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
-      videoBlocked = true;
-    });
+    const wantSound = !muted;
+    videoEl.muted = true;
+    videoEl
+      .play()
+      .then(() => {
+        if (wantSound && videoEl) {
+          setTimeout(() => {
+            // 读取最新 muted 偏好，若用户在等待期间又静音则不再恢复
+            if (videoEl && !muted && !videoEnded) videoEl.muted = false;
+          }, 150);
+        }
+      })
+      .catch(() => {
+        // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
+        videoBlocked = true;
+      });
   }
   function onVideoError() {
     videoError = true;
@@ -239,8 +259,7 @@
     videoEl.currentTime = 0;
     videoEnded = false;
     videoBlocked = false;
-    videoEl.muted = muted;
-    videoEl.play().catch(() => (videoBlocked = true));
+    playWithAntiPop();
   }
   function toggleLoop() {
     playMode = playMode === "loop" ? "once" : "loop";
