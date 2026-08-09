@@ -33,6 +33,38 @@
   const avc = $derived(
     videoEl ? videoEl.canPlayType('video/mp4; codecs="avc1.42E01E"') : "（无视频元素）",
   );
+
+  function buildInfo(): string {
+    const lines = [
+      `平台: ${navigator.userAgent}`,
+      `HDR 屏(dynamic-range): ${hdr ? "是" : "否"}`,
+      `广色域(p3): ${p3 ? "是" : "否"}`,
+      `当前图片: ${photo?.name ?? "无"}`,
+      `is_live: ${photo?.is_live}`,
+      `video_rotation: ${photo?.video_rotation ?? "—"}`,
+      `ultra_hdr: ${photo?.ultra_hdr ? JSON.stringify(photo.ultra_hdr) : "无"}`,
+      `视频 URL: ${videoUrl ? "已设置" : "未设置"}`,
+      `视频错误: ${videoError}`,
+      `视频已结束: ${videoEnded}`,
+      `HEVC 支持(hvc1): ${hevc}`,
+      `H.264 支持(avc1): ${avc}`,
+      `视频尺寸: ${videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}`,
+      `图片已加载: ${imgLoaded}`,
+      `图片错误: ${imgError}`,
+    ];
+    return lines.join("\n");
+  }
+
+  let copied = $state(false);
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(buildInfo());
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {
+      /* 剪贴板不可用时忽略 */
+    }
+  }
 </script>
 
 <div
@@ -45,7 +77,10 @@
 >
   <div class="diag-head">
     <span>诊断信息</span>
-    <button class="close" onclick={() => (app.showDiag = false)}>×</button>
+    <div class="head-actions">
+      <button class="copy" onclick={copyAll}>{copied ? "已复制 ✓" : "复制"}</button>
+      <button class="close" onclick={() => (app.showDiag = false)}>×</button>
+    </div>
   </div>
   <table>
     <tbody>
@@ -86,6 +121,7 @@
     padding: 10px 12px;
     font-size: 11.5px;
     backdrop-filter: blur(8px);
+    user-select: text;
   }
 
   .diag-head {
@@ -96,6 +132,26 @@
     color: #e8e8e8;
     margin-bottom: 8px;
   }
+
+  .head-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .copy {
+    border: 1px solid #34373d;
+    background: #23252b;
+    color: #c9cdd4;
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .copy:hover {
+    background: #2c2f36;
+  }
+
   .close {
     border: none;
     background: transparent;
