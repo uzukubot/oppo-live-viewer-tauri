@@ -3,14 +3,14 @@
   import { app, show } from "$lib/state.svelte";
   import ThumbCell from "./ThumbCell.svelte";
 
-  const CELL = 200;
-  const GAP = 14;
+  const CELL = 160;
+  const GAP = 12;
 
   let gridEl: HTMLDivElement;
   let scrollTop = $state(0);
   let viewportH = $state(600);
   let width = $state(0);
-  let sel = $state(0);
+  let lastIndex = -1;
 
   const cols = $derived(Math.max(1, Math.floor((width + GAP) / (CELL + GAP))));
   const totalRows = $derived(Math.max(0, Math.ceil(app.photos.length / cols)));
@@ -48,43 +48,19 @@
     viewportH = gridEl.clientHeight;
   }
 
-  function scrollToRow(index: number) {
-    const row = Math.floor(index / cols);
-    const y = row * (CELL + GAP);
-    gridEl?.scrollTo({ top: y, behavior: "smooth" });
-  }
-
-  function onKey(e: KeyboardEvent) {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (app.photos.length === 0) return;
-    switch (e.key) {
-      case "ArrowRight":
-        e.preventDefault();
-        sel = Math.min(app.photos.length - 1, sel + 1);
-        scrollToRow(sel);
-        break;
-      case "ArrowLeft":
-        e.preventDefault();
-        sel = Math.max(0, sel - 1);
-        scrollToRow(sel);
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        sel = Math.min(app.photos.length - 1, sel + cols);
-        scrollToRow(sel);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        sel = Math.max(0, sel - cols);
-        scrollToRow(sel);
-        break;
-      case "Enter":
-        e.preventDefault();
-        show(sel);
-        break;
+  /** 当前照片变化时，网格滚动到对应行。 */
+  $effect(() => {
+    const i = app.index;
+    if (i !== lastIndex) {
+      lastIndex = i;
+      if (gridEl && cols > 0) {
+        const rowTop = Math.floor(i / cols) * (CELL + GAP);
+        if (rowTop < gridEl.scrollTop || rowTop + CELL > gridEl.scrollTop + gridEl.clientHeight) {
+          gridEl.scrollTo({ top: rowTop, behavior: "smooth" });
+        }
+      }
     }
-  }
+  });
 
   onMount(() => {
     const ro = new ResizeObserver(() => {
@@ -93,11 +69,7 @@
       viewportH = gridEl.clientHeight;
     });
     ro.observe(gridEl);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => ro.disconnect();
   });
 </script>
 
@@ -107,19 +79,21 @@
       <button
         class="cell"
         style="left:{c.x}px;top:{c.y}px;width:{CELL}px;height:{CELL}px;"
-        onclick={() => {
-          sel = c.index;
-          show(c.index);
-        }}
+        onclick={() => show(c.index)}
       >
-        <ThumbCell meta={app.photos[c.index]} selected={sel === c.index} />
+        <ThumbCell meta={app.photos[c.index]} selected={app.index === c.index} />
       </button>
     {/each}
   </div>
+
+  {#if app.scanning}
+    <div class="scan-footer">已加载 {app.photos.length} / {app.scanTotal}，正在扫描…</div>
+  {/if}
 </div>
 
 <style>
   .grid {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -144,5 +118,16 @@
     border: none;
     background: none;
     cursor: pointer;
+  }
+
+  .scan-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: #8a8f98;
+    background: linear-gradient(transparent, #121212 40%);
+    text-align: center;
+    pointer-events: none;
   }
 </style>

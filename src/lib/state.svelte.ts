@@ -5,15 +5,16 @@ export const app = $state({
   photos: [] as PhotoMeta[],
   folder: "",
   index: 0,
-  view: "grid" as "grid" | "viewer",
   error: "" as string,
   lastOpened: "" as string,
   /** 是否仍在流式扫描（列表会边扫边追加）。 */
   scanning: false,
   /** 文件夹内图片总数（来自 start_scan / open_path）。 */
   scanTotal: 0,
-  /** 文件夹浏览模式：默认文件名列表（省资源），缩略图网格需手动开启。 */
+  /** 侧边栏内容：默认文件名列表（省资源），缩略图网格需手动开启。 */
   viewMode: "list" as "list" | "grid",
+  /** 侧边栏是否可见（可隐藏，隐藏后仅剩查看器）。 */
+  sidebarVisible: true,
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {
@@ -26,17 +27,14 @@ export function setPhotos(folder: string, photos: PhotoMeta[]) {
 export function show(index: number) {
   if (index < 0 || index >= app.photos.length) return;
   app.index = index;
-  app.view = "viewer";
 }
 
 export function next() {
   if (app.photos.length === 0) return;
   app.index = (app.index + 1) % app.photos.length;
-  if (app.view !== "viewer") app.view = "viewer";
 }
 
 export function prev() {
   if (app.photos.length === 0) return;
   app.index = (app.index - 1 + app.photos.length) % app.photos.length;
-  if (app.view !== "viewer") app.view = "viewer";
 }

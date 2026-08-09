@@ -7,7 +7,7 @@
   let listEl: HTMLDivElement;
   let scrollTop = $state(0);
   let viewportH = $state(600);
-  let sel = $state(0);
+  let lastIndex = -1;
 
   const total = $derived(app.photos.length);
   const totalH = $derived(total * ROW);
@@ -27,42 +27,26 @@
     viewportH = listEl.clientHeight;
   }
 
-  function scrollToSel() {
-    listEl?.scrollTo({ top: sel * ROW, behavior: "smooth" });
-  }
-
-  function onKey(e: KeyboardEvent) {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (app.photos.length === 0) return;
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        sel = Math.min(total - 1, sel + 1);
-        scrollToSel();
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        sel = Math.max(0, sel - 1);
-        scrollToSel();
-        break;
-      case "Enter":
-        e.preventDefault();
-        show(sel);
-        break;
+  /** 当前照片变化时，列表滚动到对应行（保持选择可见）。 */
+  $effect(() => {
+    const i = app.index;
+    if (i !== lastIndex) {
+      lastIndex = i;
+      if (listEl) {
+        const rowTop = i * ROW;
+        if (rowTop < listEl.scrollTop || rowTop + ROW > listEl.scrollTop + listEl.clientHeight) {
+          listEl.scrollTo({ top: rowTop, behavior: "smooth" });
+        }
+      }
     }
-  }
+  });
 
   onMount(() => {
     const ro = new ResizeObserver(() => {
       if (listEl) viewportH = listEl.clientHeight;
     });
     ro.observe(listEl);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => ro.disconnect();
   });
 </script>
 
@@ -70,12 +54,9 @@
   <div class="inner" style="height:{totalH}px;">
     {#each rows as i (i)}
       <button
-        class="row {sel === i ? 'selected' : ''}"
+        class="row {app.index === i ? 'selected' : ''}"
         style="top:{i * ROW}px;height:{ROW}px;"
-        onclick={() => {
-          sel = i;
-          show(i);
-        }}
+        onclick={() => show(i)}
       >
         <span class="name" title={app.photos[i].name}>{app.photos[i].name}</span>
         <span class="meta">
@@ -98,6 +79,7 @@
 
 <style>
   .list {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -116,17 +98,6 @@
     position: relative;
   }
 
-  .scan-footer {
-    position: sticky;
-    bottom: 0;
-    padding: 8px 18px;
-    font-size: 12px;
-    color: #8a8f98;
-    background: linear-gradient(transparent, #121212 40%);
-    text-align: center;
-    pointer-events: none;
-  }
-
   .row {
     position: absolute;
     left: 0;
@@ -134,8 +105,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 0 18px;
+    gap: 10px;
+    padding: 0 12px;
     border: none;
     border-bottom: 1px solid #1c1e22;
     background: transparent;
@@ -158,21 +129,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 12.5px;
+    font-size: 12px;
   }
 
   .meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex: none;
   }
 
   .tag {
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    padding: 2px 7px;
+    padding: 2px 6px;
     border-radius: 999px;
   }
   .tag.live {
@@ -186,7 +157,18 @@
 
   .dims {
     color: #5a5e66;
-    font-size: 12px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
+  }
+
+  .scan-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: #8a8f98;
+    background: linear-gradient(transparent, #121212 40%);
+    text-align: center;
+    pointer-events: none;
   }
 </style>

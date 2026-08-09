@@ -1,9 +1,6 @@
 <script lang="ts">
   import { app } from "$lib/state.svelte";
   import { pickFolder } from "$lib/actions";
-
-  const inViewer = $derived(app.view === "viewer");
-  const inFolder = $derived(!!app.folder && app.view !== "viewer");
 </script>
 
 <header class="topbar">
@@ -18,27 +15,13 @@
   </div>
 
   <div class="actions">
-    {#if inFolder}
-      <div class="seg">
-        <button
-          class="seg-btn {app.viewMode === 'list' ? 'on' : ''}"
-          onclick={() => (app.viewMode = "list")}
-          title="文件名列表（省资源，默认）"
-        >
-          列表
-        </button>
-        <button
-          class="seg-btn {app.viewMode === 'grid' ? 'on' : ''}"
-          onclick={() => (app.viewMode = "grid")}
-          title="缩略图网格（大文件夹较耗资源）"
-        >
-          缩略图
-        </button>
-      </div>
-    {/if}
-    {#if inViewer}
-      <button class="btn" onclick={() => (app.view = "grid")} title="返回列表 (Esc)">
-        返回
+    {#if app.folder && !app.sidebarVisible}
+      <button
+        class="btn"
+        onclick={() => (app.sidebarVisible = true)}
+        title="显示侧边栏 (Esc)"
+      >
+        侧边栏
       </button>
     {/if}
     <button class="btn primary" onclick={pickFolder}>打开文件夹</button>
@@ -84,31 +67,6 @@
     display: flex;
     gap: 8px;
     align-items: center;
-  }
-
-  .seg {
-    display: flex;
-    background: #202227;
-    border: 1px solid #34373d;
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .seg-btn {
-    border: none;
-    background: transparent;
-    color: #8a8f98;
-    padding: 7px 14px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .seg-btn:hover {
-    color: #d8dae0;
-  }
-  .seg-btn.on {
-    background: #3d6ef7;
-    color: #fff;
   }
 
   .btn {

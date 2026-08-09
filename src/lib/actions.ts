@@ -42,7 +42,6 @@ export async function openFolder(folder: string) {
     await ensureScanListeners();
     photoCache.clear();
     setPhotos(folder, []);
-    app.view = "grid";
     app.scanning = true;
     const res = await startScan(folder);
     app.scanTotal = res.total;
@@ -75,7 +74,6 @@ export async function openPath(path: string) {
     photoCache.clear();
     setPhotos(res.folder, []);
     app.index = res.index;
-    app.view = "viewer";
     app.scanning = true;
     app.scanTotal = res.total;
     rememberFolder(res.folder);
