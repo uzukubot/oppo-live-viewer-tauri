@@ -78,10 +78,14 @@ jobs:
           mkdir -p portable
           cp src-tauri/target/release/oppo-live-viewer-tauri.exe portable/OPPO-Live-Viewer-portable-x64.exe
 
+      - name: 取短 commit ID
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: 上传安装包到 Actions Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: installer-${{ matrix.platform }}
+          name: installer-${{ matrix.platform }}-${{ steps.sha.outputs.short }}
           path: |
             src-tauri/target/**/release/bundle/**/*.dmg
             src-tauri/target/**/release/bundle/**/*.msi

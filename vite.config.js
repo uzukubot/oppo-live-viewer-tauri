@@ -3,10 +3,17 @@ import { sveltekit } from "@sveltejs/kit/vite";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+// @ts-expect-error process is a nodejs global
+const commit = process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : "dev";
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
+
+  // 注入构建时的 commit ID（GitHub Actions 提供 GITHUB_SHA；本地为 "dev"）
+  define: {
+    __APP_COMMIT__: JSON.stringify(commit),
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

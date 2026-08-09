@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PhotoMeta } from "$lib/types";
   import { app } from "$lib/state.svelte";
+  import { APP_COMMIT } from "$lib/version";
 
   interface Props {
     photo: PhotoMeta | null;
@@ -43,6 +44,7 @@
 
   function buildInfo(): string {
     const lines = [
+      `版本(commit): ${APP_COMMIT}`,
       `平台: ${navigator.userAgent}`,
       `HDR 屏(dynamic-range): ${hdr ? "是" : "否"}`,
       `广色域(p3): ${p3 ? "是" : "否"}`,
@@ -95,6 +97,7 @@
   </div>
   <table>
     <tbody>
+      <tr><th>版本 (commit)</th><td>{APP_COMMIT}</td></tr>
       <tr><th>平台</th><td>{navigator.userAgent.slice(0, 90)}</td></tr>
       <tr><th>HDR 屏 (dynamic-range)</th><td>{hdr ? "是 ✅" : "否 ❌"}</td></tr>
       <tr><th>广色域 (color-gamut p3)</th><td>{p3 ? "是" : "否"}</td></tr>
