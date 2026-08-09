@@ -11,14 +11,6 @@
     videoEl: HTMLVideoElement | null;
     imgLoaded: boolean;
     imgError: boolean;
-    timing: {
-      prevPlaying: boolean;
-      schedDelay: number;
-      toSched: number;
-      toInvoke: number;
-      toStart: number;
-      blocked?: boolean;
-    } | null;
   }
   let {
     photo,
@@ -28,7 +20,6 @@
     videoEl,
     imgLoaded,
     imgError,
-    timing,
   }: Props = $props();
 
   let hdr = $state(false);
@@ -116,9 +107,6 @@
         ? `readyState=${vReady} currentTime=${vNow.toFixed(2)} paused=${vPaused} 错误=${videoEl.error ? videoEl.error.code : "无"}`
         : "无视频元素"}`,
       `已起播: ${vNow > 0 ? "是" : "否"}`,
-      `起播时序: ${timing
-        ? `上一在播=${timing.prevPlaying ? "是" : "否"} 设定延迟=${timing.schedDelay}ms 实际等待=${timing.toInvoke - timing.toSched}ms 切→起播=${timing.toStart}ms${timing.blocked ? " 被拦" : ""}`
-        : "—"}`,
       `图片已加载: ${imgLoaded}`,
       `图片错误: ${imgError}`,
     ];
@@ -171,7 +159,6 @@
       <tr><th>视频尺寸</th><td>{videoEl ? videoEl.videoWidth + " × " + videoEl.videoHeight : "无视频元素"}</td></tr>
       <tr><th>视频状态</th><td>{videoEl ? `readyState=${vReady} currentTime=${vNow.toFixed(2)} paused=${vPaused} 错误=${videoEl.error ? videoEl.error.code : "无"}` : "无视频元素"}</td></tr>
       <tr><th>已起播</th><td>{vNow > 0 ? "是" : "否"}</td></tr>
-      <tr><th>起播时序</th><td>{timing ? `上一在播 ${timing.prevPlaying ? "是" : "否"} · 设定延迟 ${timing.schedDelay}ms · 实际等待 ${timing.toInvoke - timing.toSched}ms · 切→起播 ${timing.toStart}ms${timing.blocked ? " · 被拦" : ""}` : "—"}</td></tr>
       <tr><th>图片已加载</th><td>{String(imgLoaded)}</td></tr>
       <tr><th>图片错误</th><td>{String(imgError)}</td></tr>
     </tbody>

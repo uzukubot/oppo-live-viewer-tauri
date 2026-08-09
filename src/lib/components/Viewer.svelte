@@ -30,24 +30,6 @@
   let videoBlocked = $state(false);
   let playMode = $state<"once" | "loop">("once");
   let muted = $state(true);
-  /** 起播时序诊断（供 F12 面板显示）：测量切换→起播各节点耗时。 */
-  let switchAt = 0;
-  let startDiag = $state<{
-    prevPlaying: boolean;
-    schedDelay: number;
-    toSched: number;
-    toInvoke: number;
-    toStart: number;
-    blocked?: boolean;
-  } | null>(null);
-  /** 音量淡变（淡入/淡出）的单 rAF 槽。 */
-  let volRAF: number | null = null;
-  /** 当前是否正在淡变中（防止结尾淡出被反复触发）。 */
-  let fading = false;
-  /** 结尾淡出监控的 rAF 槽。 */
-  let endFadeRAF: number | null = null;
-  /** 是否还有待清理的旧视频（切走时先淡出再停，完成前不挂新视频）。 */
-  let oldVideoPending = false;
 
   function clamp(v: number, lo: number, hi: number) {
     return Math.min(hi, Math.max(lo, v));
@@ -73,58 +55,26 @@
 
   // 切换照片（按 id）时重置视图与视频状态；load_photo 回写元数据（同 id）不重置
   let lastPhotoId: number | null = null;
-  /** 上一个视频切换时是否正在播放（决定新视频是否延迟起播，避免重叠爆音）。 */
-  let lastVideoWasPlaying = false;
   $effect(() => {
     const p = photo;
     void p;
     if (p?.id !== lastPhotoId) {
       lastPhotoId = p?.id ?? null;
-      switchAt = performance.now();
-      startDiag = null;
       zoom = 1;
       pan = { x: 0, y: 0 };
       imgSrc = null;
       imgLoaded = false;
       imgError = false;
+      // 切换前先静音+暂停旧视频
+      if (videoEl) {
+        videoEl.muted = true;
+        videoEl.pause();
+      }
+      videoUrl = null;
       videoError = false;
       videoDims = null;
       videoEnded = false;
       videoBlocked = false;
-      // 旧视频：持续声音被硬切必然爆音，先淡出再停；淡出完成前不挂新视频
-      const old = videoEl;
-      if (old) {
-        lastVideoWasPlaying = !old.paused && !old.ended;
-        const wasPlaying = lastVideoWasPlaying;
-        if (wasPlaying && !muted && old.volume > 0.01) {
-          oldVideoPending = true;
-          const oldUrl = videoUrl;
-          fadeVolume(old, 0, 80);
-          // 等淡出真正到 0 再停（rAF 可能抖动）；上限 250ms 防卡死
-          let waited = 0;
-          const finish = () => {
-            waited += 15;
-            if (waited < 250 && old.volume > 0.01) {
-              setTimeout(finish, 15);
-              return;
-            }
-            old.muted = true;
-            old.pause();
-            oldVideoPending = false;
-            if (videoUrl === oldUrl) videoUrl = null;
-          };
-          setTimeout(finish, 15);
-        } else {
-          oldVideoPending = false;
-          old.muted = true;
-          old.pause();
-          videoUrl = null;
-        }
-      } else {
-        lastVideoWasPlaying = false;
-        oldVideoPending = false;
-        videoUrl = null;
-      }
     }
     if (p) {
       const pid = p.id;
@@ -144,17 +94,7 @@
     if (p?.is_live) {
       const pid = p.id;
       photoCache.ensureMp4Url(p).then((u) => {
-        if (!u || photo?.id !== pid) return;
-        // 等旧视频淡出卸载后再挂新视频，否则换 src 会硬切旧音频
-        const apply = () => {
-          if (photo?.id !== pid) return;
-          if (oldVideoPending) {
-            setTimeout(apply, 20);
-            return;
-          }
-          videoUrl = u;
-        };
-        apply();
+        if (u && photo?.id === pid) videoUrl = u;
       });
     }
     // 预取相邻照片，快速翻看
@@ -277,78 +217,30 @@
     videoDims = { w: videoEl.videoWidth, h: videoEl.videoHeight };
     tryPlay();
   }
-  /** 显式设置 muted 后播放（避免自动播放策略因未静音拦截）。 */
+  /** 先静音起播以兼容自动播放策略，播放真正开始后若用户有声则恢复。 */
   function tryPlay() {
-    playWithAntiPop();
-  }
-  /** 起播：仅当刚从前一个播放中的视频切过来时延迟整段起播（避免新旧声音重叠爆音）。
-   * 切换标记只在切换瞬间有效，起播即消耗，之后的重播/循环不再延迟。 */
-  let startTimer: ReturnType<typeof setTimeout> | null = null;
-  let startEl: HTMLVideoElement | null = null;
-  function playWithAntiPop() {
     if (!videoEl) return;
     const el = videoEl;
     const wantSound = !muted;
-    const prevPlaying = lastVideoWasPlaying;
-    const delay = prevPlaying ? 150 : 0;
-    lastVideoWasPlaying = false; // 消耗切换标记：只有"从播放中的视频切过来"这一次需要延迟
-    const schedAt = performance.now();
-    // loadedmetadata / canplay 会对同一元素重复触发：已有待执行起播则跳过
-    if (startTimer && startEl === el) return;
-    startEl = el;
-    clearTimeout(startTimer ?? undefined);
-    startTimer = setTimeout(() => {
-      startTimer = null;
-      // 期间可能已切走（videoEl 换了或为空），跳过
-      if (!el || el !== videoEl || videoEnded) return;
-      // 先静音起播以兼容自动播放策略，播放真正开始后立即恢复
-      el.muted = true;
-      const invokedAt = performance.now();
-      el.play()
-        .then(() => {
-          const startedAt = performance.now();
-          startDiag = {
-            prevPlaying,
-            schedDelay: delay,
-            toSched: Math.round(schedAt - switchAt),
-            toInvoke: Math.round(invokedAt - switchAt),
-            toStart: Math.round(startedAt - switchAt),
-          };
-          if (wantSound && el === videoEl && !muted) {
-            el.muted = false;
-            // 音量从 0 短淡入，避免音频瞬间从静音跳到满音量产生爆音
-            el.volume = 0;
-            fadeVolume(el, 1, 50);
-          }
-          monitorEndFade();
-        })
-        .catch(() => {
-          startDiag = {
-            prevPlaying,
-            schedDelay: delay,
-            toSched: Math.round(schedAt - switchAt),
-            toInvoke: Math.round(invokedAt - switchAt),
-            toStart: -1,
-            blocked: true,
-          };
-          // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
-          videoBlocked = true;
-        });
-    }, delay);
+    el.muted = true;
+    el.play()
+      .then(() => {
+        if (wantSound && el === videoEl && !muted) el.muted = false;
+      })
+      .catch(() => {
+        // 自动播放被浏览器策略拦截：视频保持挂载，显示"点击播放"
+        videoBlocked = true;
+      });
   }
   function onVideoError() {
     videoError = true;
   }
-  /** 播一次：结束后回到封面图；循环模式：重新播放（音量淡入避免循环点爆音）。 */
+  /** 播一次：结束后回到封面图；循环模式：重新播放。 */
   function onVideoEnded() {
     if (playMode === "loop") {
       if (videoEl) {
-        const el = videoEl;
-        el.currentTime = 0;
-        el.volume = muted ? 1 : 0;
-        el.play().catch(() => {});
-        if (!muted) fadeVolume(el, 1, 50);
-        monitorEndFade();
+        videoEl.currentTime = 0;
+        videoEl.play().catch(() => {});
       }
     } else {
       videoEnded = true;
@@ -356,12 +248,10 @@
   }
   function replay() {
     if (!videoEl) return;
-    switchAt = performance.now();
-    startDiag = null;
     videoEl.currentTime = 0;
     videoEnded = false;
     videoBlocked = false;
-    playWithAntiPop();
+    tryPlay();
   }
   function toggleLoop() {
     playMode = playMode === "loop" ? "once" : "loop";
@@ -370,47 +260,7 @@
   function toggleMute() {
     muted = !muted;
     // 只切换静音，不主动播放：视频播完后想听声音请点"重播"，否则会静音播放一帧
-    if (videoEl) {
-      videoEl.muted = muted;
-      // 取消静音时如果正处于静音（volume=0）的淡出中，恢复到正常音量
-      if (!muted && videoEl.volume < 1) fadeVolume(videoEl, 1, 50);
-    }
-  }
-  /** 把音量渐变到 target（约 ms 毫秒），单 rAF 槽，避免淡入/淡出互相打架。 */
-  function fadeVolume(el: HTMLVideoElement, target: number, ms: number) {
-    if (volRAF !== null) cancelAnimationFrame(volRAF);
-    const from = el.volume;
-    const start = performance.now();
-    fading = true;
-    const step = () => {
-      const p = Math.min(1, (performance.now() - start) / ms);
-      el.volume = from + (target - from) * p;
-      if (p < 1 && el === videoEl && !el.paused && !videoEnded) {
-        volRAF = requestAnimationFrame(step);
-      } else {
-        el.volume = target;
-        volRAF = null;
-        fading = false;
-      }
-    };
-    volRAF = requestAnimationFrame(step);
-  }
-  /** 播放期间用 rAF 监控：接近结尾时淡出音量，避免音频结尾被硬切爆音。
-   * （不能用 timeupdate——它约 4Hz，赶不上结尾最后 150ms 的淡出窗口。） */
-  function monitorEndFade() {
-    if (endFadeRAF !== null) cancelAnimationFrame(endFadeRAF);
-    const tick = () => {
-      const v = videoEl;
-      if (!v || v.paused || v.ended || muted) {
-        endFadeRAF = null;
-        return;
-      }
-      if (!fading && v.duration > 0 && v.duration - v.currentTime < 0.15 && v.volume > 0.01) {
-        fadeVolume(v, 0, 70);
-      }
-      endFadeRAF = requestAnimationFrame(tick);
-    };
-    endFadeRAF = requestAnimationFrame(tick);
+    if (videoEl) videoEl.muted = muted;
   }
 
   function videoLayout() {
@@ -554,7 +404,6 @@
       {videoEl}
       {imgLoaded}
       {imgError}
-      timing={startDiag}
     />
   {/if}
 </div>
