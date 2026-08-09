@@ -4,7 +4,7 @@
   import FolderGrid from "./FolderGrid.svelte";
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" style="width:{app.sidebarWidth}px;">
   <div class="side-header">
     <span class="count">
       {#if app.scanning}
@@ -49,12 +49,9 @@
   .sidebar {
     display: flex;
     flex-direction: column;
-    width: 300px;
-    min-width: 200px;
-    max-width: 50%;
     background: #121212;
-    border-right: 1px solid #26282d;
     flex: none;
+    overflow: hidden;
   }
 
   .side-header {

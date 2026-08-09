@@ -4,6 +4,7 @@
   import { displayDims } from "$lib/types";
   import type { PhotoMeta } from "$lib/types";
   import { photoCache } from "$lib/viewer/photoCache";
+  import { viewerUrl } from "$lib/protocol";
 
   const photo = $derived(app.photos[app.index] ?? null);
 
@@ -15,9 +16,10 @@
   let pan = $state({ x: 0, y: 0 });
   let dragging = $state(false);
   let lastPoint = $state({ x: 0, y: 0 });
-  let imgSrc = $state<string | null>(null);
   let imgLoaded = $state(false);
   let imgError = $state(false);
+  /** 直接用 viewer:// URL 作为 <img> 源（最接近浏览器原生加载，利于 Ultra HDR）。 */
+  const imgSrc = $derived(photo ? viewerUrl(photo.id, "jpeg") : null);
 
   // 视频
   let videoUrl = $state<string | null>(null);
@@ -59,7 +61,6 @@
       lastPhotoId = p?.id ?? null;
       zoom = 1;
       pan = { x: 0, y: 0 };
-      imgSrc = null;
       imgLoaded = false;
       imgError = false;
       videoUrl = null;
@@ -68,10 +69,8 @@
       videoEnded = false;
     }
     if (p) {
-      const pid = p.id;
-      photoCache.ensureJpegUrl(p).then((u) => {
-        if (photo?.id === pid) imgSrc = u;
-      });
+      // 预热 Rust 字节缓存，保证 <img>/<video> 的 viewer:// 请求命中缓存
+      photoCache.ensureBlob(p).catch(() => {});
     }
     if (p?.is_live) {
       const pid = p.id;
@@ -178,7 +177,16 @@
   function onVideoMetadata() {
     if (!videoEl) return;
     videoDims = { w: videoEl.videoWidth, h: videoEl.videoHeight };
-    videoEl.play().catch(() => {});
+    tryPlay();
+  }
+  /** 显式设置 muted 后播放（避免 autoplay 因未静音被拦）。 */
+  function tryPlay() {
+    if (!videoEl) return;
+    videoEl.muted = muted;
+    videoEl.play().catch(() => {
+      // 自动播放被浏览器策略拦截：显示重播按钮，等用户点击播放
+      videoEnded = true;
+    });
   }
   function onVideoError() {
     videoError = true;
@@ -278,6 +286,7 @@
         muted={muted}
         playsinline
         onloadedmetadata={onVideoMetadata}
+        oncanplay={tryPlay}
         onerror={onVideoError}
         onended={onVideoEnded}
         style={vl
@@ -285,6 +294,9 @@
           : "width:1px;height:1px;transform:translate(-50%,-50%);"}
       ></video>
     </div>
+  {/if}
+  {#if photo?.is_live && videoError}
+    <div class="msg err">Live 视频无法播放（可能缺少 HEVC 解码器）</div>
   {/if}
 
   <div class="badges">

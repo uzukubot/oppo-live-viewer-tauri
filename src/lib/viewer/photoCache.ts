@@ -5,8 +5,7 @@ import { app } from "../state.svelte";
 
 interface Entry {
   blob?: Blob;
-  /** 静态图的 objectURL（Chromium 对 blob 同样会应用 Ultra HDR 增益图）。 */
-  jpegUrl?: string;
+  /** Live Photo 视频的 objectURL。 */
   mp4Url?: string;
   loadingBlob?: Promise<Blob>;
 }
@@ -31,25 +30,9 @@ class PhotoCache {
       const evict = this.order.pop();
       if (evict == null) break;
       const e = this.entries.get(evict);
-      if (e?.jpegUrl) URL.revokeObjectURL(e.jpegUrl);
       if (e?.mp4Url) URL.revokeObjectURL(e.mp4Url);
       this.entries.delete(evict);
     }
-  }
-
-  /** 获取静态图的 objectURL（查看器 <img> 用）。 */
-  async ensureJpegUrl(meta: PhotoMeta): Promise<string> {
-    let e = this.entries.get(meta.id);
-    if (e?.jpegUrl) {
-      this.touch(meta.id);
-      return e.jpegUrl;
-    }
-    const blob = await this.ensureBlob(meta);
-    if (!this.entries.has(meta.id)) this.entries.set(meta.id, {});
-    const entry = this.entries.get(meta.id)!;
-    if (!entry.jpegUrl) entry.jpegUrl = URL.createObjectURL(blob);
-    this.touch(meta.id);
-    return entry.jpegUrl;
   }
 
   /** 确保 id 对应的 JPEG blob 已加载（并预热 Rust 字节缓存）。 */
@@ -147,7 +130,6 @@ class PhotoCache {
   clear() {
     for (const id of [...this.entries.keys()]) {
       const e = this.entries.get(id);
-      if (e?.jpegUrl) URL.revokeObjectURL(e.jpegUrl);
       if (e?.mp4Url) URL.revokeObjectURL(e.mp4Url);
     }
     this.entries.clear();

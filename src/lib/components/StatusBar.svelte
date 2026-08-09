@@ -3,6 +3,10 @@
   import { displayDims, formatBytes, formatDate } from "$lib/types";
 
   const p = $derived(app.photos[app.index] ?? null);
+  /** 当前显示是否被 WebView 识别为高动态范围（HDR）屏。 */
+  const hdrDisplay = $derived(
+    typeof matchMedia !== "undefined" && matchMedia("(dynamic-range: high)").matches,
+  );
 </script>
 
 {#if p}
@@ -22,7 +26,7 @@
     {/if}
     {#if p.ultra_hdr}
       <span class="sep">·</span>
-      <span class="tag hdr">Ultra HDR</span>
+      <span class="tag hdr">Ultra HDR{hdrDisplay ? "" : "（SDR 屏）"}</span>
     {/if}
     {#if p.is_live}
       <span class="sep">·</span>

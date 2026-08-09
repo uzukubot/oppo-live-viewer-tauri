@@ -9,6 +9,22 @@
   import { openFolder, openPath } from "$lib/actions";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
 
+  /** 拖拽调整侧边栏宽度。 */
+  function startResize(e: PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = app.sidebarWidth;
+    function onMove(ev: PointerEvent) {
+      app.sidebarWidth = Math.min(800, Math.max(180, startW + (ev.clientX - startX)));
+    }
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   function onKey(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -73,6 +89,21 @@
     <div class="pane">
       {#if app.sidebarVisible}
         <Sidebar />
+        <div
+          class="resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整侧边栏宽度"
+          onpointerdown={startResize}
+        ></div>
+      {:else}
+        <button
+          class="expand-btn"
+          onclick={() => (app.sidebarVisible = true)}
+          title="显示侧边栏"
+        >
+          »
+        </button>
       {/if}
       <div class="main">
         <Viewer />
@@ -99,6 +130,34 @@
     display: flex;
     flex: 1;
     min-height: 0;
+    position: relative;
+  }
+
+  .resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    flex: none;
+    background: transparent;
+  }
+  .resize-handle:hover {
+    background: rgba(61, 110, 247, 0.4);
+  }
+
+  .expand-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    border: 1px solid #34373d;
+    background: #23252b;
+    color: #c9cdd4;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .expand-btn:hover {
+    background: #2c2f36;
   }
 
   .main {

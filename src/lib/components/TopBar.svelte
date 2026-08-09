@@ -15,15 +15,6 @@
   </div>
 
   <div class="actions">
-    {#if app.folder && !app.sidebarVisible}
-      <button
-        class="btn"
-        onclick={() => (app.sidebarVisible = true)}
-        title="显示侧边栏 (Esc)"
-      >
-        侧边栏
-      </button>
-    {/if}
     <button class="btn primary" onclick={pickFolder}>打开文件夹</button>
   </div>
 </header>

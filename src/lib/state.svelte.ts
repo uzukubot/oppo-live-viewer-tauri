@@ -15,6 +15,8 @@ export const app = $state({
   viewMode: "list" as "list" | "grid",
   /** 侧边栏是否可见（可隐藏，隐藏后仅剩查看器）。 */
   sidebarVisible: true,
+  /** 侧边栏宽度（可拖拽调整）。 */
+  sidebarWidth: 300,
 });
 
 export function setPhotos(folder: string, photos: PhotoMeta[]) {
