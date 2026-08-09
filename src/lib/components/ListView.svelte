@@ -60,6 +60,10 @@
       if (listEl) viewportH = listEl.clientHeight;
     });
     ro.observe(listEl);
+    // 重新挂载（如边栏隐藏后展开）时瞬移到当前照片，避免触发大滚动动画
+    lastIndex = app.index;
+    const pos = filtered.indexOf(app.index);
+    if (listEl && pos >= 0) listEl.scrollTop = pos * ROW;
     return () => ro.disconnect();
   });
 </script>

@@ -3,10 +3,16 @@
   import { displayDims, formatBytes, formatDate } from "$lib/types";
 
   const p = $derived(app.photos[app.index] ?? null);
-  /** 当前显示是否被 WebView 识别为高动态范围（HDR）屏。 */
-  const hdrDisplay = $derived(
-    typeof matchMedia !== "undefined" && matchMedia("(dynamic-range: high)").matches,
-  );
+  /** 当前显示是否被 WebView 识别为高动态范围（HDR）屏（监听变化，动态更新）。 */
+  let hdrDisplay = $state(false);
+  $effect(() => {
+    if (typeof matchMedia === "undefined") return;
+    const mq = matchMedia("(dynamic-range: high)");
+    const update = () => (hdrDisplay = mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  });
 </script>
 
 {#if p}

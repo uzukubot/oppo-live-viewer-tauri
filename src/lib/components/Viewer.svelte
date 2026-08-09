@@ -280,10 +280,8 @@
   }
   function toggleMute() {
     muted = !muted;
-    if (videoEl) {
-      videoEl.muted = muted;
-      if (!muted) videoEl.play().catch(() => (videoBlocked = true));
-    }
+    // 只切换静音，不主动播放：视频播完后想听声音请点"重播"，否则会静音播放一帧
+    if (videoEl) videoEl.muted = muted;
   }
 
   function videoLayout() {
@@ -297,13 +295,16 @@
       dw = dh;
       dh = t;
     }
-    const scale = Math.min(cssW / dw, cssH / dh);
+    // 视频随图片一起缩放/平移（放大时视频也应跟随，否则像"从图片里伸出来"）
+    const scale = Math.min(cssW / dw, cssH / dh) * zoom;
     const boxW = dw * scale;
     const boxH = dh * scale;
+    const x = (cssW - boxW) / 2 + pan.x;
+    const y = (cssH - boxH) / 2 + pan.y;
     if (deg === 90 || deg === 270) {
-      return { boxW, boxH, vidW: boxH, vidH: boxW, deg };
+      return { x, y, boxW, boxH, vidW: boxH, vidH: boxW, deg };
     }
-    return { boxW, boxH, vidW: boxW, vidH: boxH, deg };
+    return { x, y, boxW, boxH, vidW: boxW, vidH: boxH, deg };
   }
 
   const vl = $derived(videoLayout());
@@ -354,7 +355,9 @@
     <div
       class="video-box"
       class:hidden={!vl || videoEnded}
-      style={vl ? `width:${vl.boxW}px;height:${vl.boxH}px;` : ""}
+      style={vl
+        ? `left:${vl.x}px;top:${vl.y}px;width:${vl.boxW}px;height:${vl.boxH}px;`
+        : ""}
       onclick={videoBlocked ? replay : toggleMute}
       onkeydown={(e) => e.key === "Enter" && (videoBlocked ? replay() : toggleMute())}
       role="button"
@@ -486,9 +489,6 @@
 
   .video-box {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
     overflow: hidden;
   }
   .video-box.hidden {

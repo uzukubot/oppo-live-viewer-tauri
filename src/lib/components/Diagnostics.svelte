@@ -22,12 +22,24 @@
     imgError,
   }: Props = $props();
 
-  const hdr = $derived(
-    typeof matchMedia !== "undefined" && matchMedia("(dynamic-range: high)").matches,
-  );
-  const p3 = $derived(
-    typeof matchMedia !== "undefined" && matchMedia("(color-gamut: p3)").matches,
-  );
+  let hdr = $state(false);
+  let p3 = $state(false);
+  $effect(() => {
+    if (typeof matchMedia === "undefined") return;
+    const mqHdr = matchMedia("(dynamic-range: high)");
+    const mqP3 = matchMedia("(color-gamut: p3)");
+    const update = () => {
+      hdr = mqHdr.matches;
+      p3 = mqP3.matches;
+    };
+    update();
+    mqHdr.addEventListener("change", update);
+    mqP3.addEventListener("change", update);
+    return () => {
+      mqHdr.removeEventListener("change", update);
+      mqP3.removeEventListener("change", update);
+    };
+  });
   const hevc = $derived(
     videoEl
       ? videoEl.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"')

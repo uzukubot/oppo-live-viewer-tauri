@@ -74,11 +74,19 @@
     }
   });
 
+  let didInitScroll = false;
   onMount(() => {
     const ro = new ResizeObserver(() => {
       if (!gridEl) return;
       width = gridEl.clientWidth;
       viewportH = gridEl.clientHeight;
+      // 重新挂载（如边栏隐藏后展开）时瞬移到当前照片，避免大滚动动画
+      if (!didInitScroll && cols > 0) {
+        didInitScroll = true;
+        lastIndex = app.index;
+        const pos = filtered.indexOf(app.index);
+        if (pos >= 0) gridEl.scrollTop = Math.floor(pos / cols) * (CELL + GAP);
+      }
     });
     ro.observe(gridEl);
     return () => ro.disconnect();
